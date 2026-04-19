@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
 // 日志条目的数据结构定义
@@ -15,12 +16,17 @@ interface LogEntry {
 
 // Logs 页面主组件：日志查看与管理
 export default function Logs() {
+  const navigate = useNavigate();
   // 日志列表数据
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  // 会话名称缓存：session_id -> name
+  const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
   // 日志级别筛选条件
   const [filterLevel, setFilterLevel] = useState('');
   // 组件筛选条件
   const [filterComponent, setFilterComponent] = useState('');
+  // 按会话过滤
+  const [filterSession, setFilterSession] = useState('');
   // 搜索关键词
   const [search, setSearch] = useState('');
   // 当前选中的单条日志（用于详情面板）
@@ -28,19 +34,31 @@ export default function Logs() {
   // 批量选中的日志ID集合
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  // 当级别或组件筛选条件变化时，重新加载日志
-  useEffect(() => { loadLogs(); }, [filterLevel, filterComponent]);
+  // 当级别或组件或会话筛选条件变化时，重新加载日志
+  useEffect(() => { loadLogs(); }, [filterLevel, filterComponent, filterSession]);
 
   // 从 API 加载日志列表
   const loadLogs = async () => {
     const data = await api.log.list({
       level: filterLevel || undefined,       // 空值转为 undefined 以跳过该筛选
       component: filterComponent || undefined,
+      sessionId: filterSession || undefined,
       search: search.trim() || undefined,    // 去除首尾空格
       limit: 500,                            // 最多返回500条
     });
     setLogs(data as LogEntry[]);
     setSelectedIds(new Set());               // 重置选中状态
+
+    // 提取日志中涉及的 session_id，批量获取名称
+    const sessionIds = [...new Set((data as LogEntry[]).map(l => l.session_id).filter(Boolean))];
+    if (sessionIds.length > 0) {
+      const sessions = await api.session.list();
+      const nameMap: Record<string, string> = {};
+      for (const s of sessions as { id: string; name: string }[]) {
+        nameMap[s.id] = s.name;
+      }
+      setSessionNames(prev => ({ ...prev, ...nameMap }));
+    }
   };
 
   // 删除单条日志的处理函数
@@ -86,6 +104,12 @@ export default function Logs() {
   // 从日志列表中提取所有不重复的组件名，用于筛选下拉框
   const components = useMemo(() => [...new Set(logs.map(l => l.component).filter(Boolean))], [logs]);
 
+  // 打开关联的会话
+  const handleOpenSession = useCallback((sid: string) => {
+    const s = sessionNames[sid];
+    navigate('/workspace', { state: { sessionId: sid } });
+  }, [navigate, sessionNames]);
+
   return (
     <div style={{ display: 'flex', height: '100%' }}>
       {/* 主区域 */}
@@ -105,6 +129,14 @@ export default function Logs() {
             <option value="">全部组件</option>
             {components.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          {logs.some(l => l.session_id) && (
+            <select className="select" value={filterSession} onChange={(e) => setFilterSession(e.target.value)} style={{ fontSize: 12, maxWidth: 200 }}>
+              <option value="">全部会话</option>
+              {[...new Set(logs.filter(l => l.session_id).map(l => l.session_id!))].map(sid => (
+                <option key={sid} value={sid}>{sessionNames[sid] || sid.slice(0, 20)}</option>
+              ))}
+            </select>
+          )}
           <input className="input" placeholder="搜索事件/摘要..." value={search} onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && loadLogs()} style={{ fontSize: 12, width: 200 }} />
           <button className="btn btn-secondary btn-sm" onClick={loadLogs}>刷新</button>
@@ -128,7 +160,7 @@ export default function Logs() {
             <div style={{ fontSize: 12 }}>
               {/* 表头 */}
               <div style={{
-                display: 'grid', gridTemplateColumns: '32px 150px 72px 90px 1fr 60px', gap: 8,
+                display: 'grid', gridTemplateColumns: '32px 150px 72px 90px 1fr 90px', gap: 8,
                 padding: '8px 16px', borderBottom: '1px solid var(--border-color)',
                 color: 'var(--text-dim)', fontWeight: 600,
               }}>
@@ -146,7 +178,7 @@ export default function Logs() {
                 <div
                   key={log.id}
                   style={{
-                    display: 'grid', gridTemplateColumns: '32px 150px 72px 90px 1fr 60px', gap: 8,
+                    display: 'grid', gridTemplateColumns: '32px 150px 72px 90px 1fr 90px', gap: 8,
                     padding: '6px 16px', borderBottom: '1px solid rgba(34,58,96,0.2)',
                     cursor: 'pointer', alignItems: 'center',
                     background: selectedLog?.id === log.id ? 'rgba(0,229,255,0.05)' : selectedIds.has(log.id) ? 'rgba(0,229,255,0.03)' : 'transparent',
@@ -163,7 +195,17 @@ export default function Logs() {
                     fontWeight: 600, textTransform: 'uppercase', fontSize: 11,
                   }}>{log.level}</span>
                   <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{log.component}</span>
-                  <span className="truncate" style={{ color: 'var(--text-primary)' }}>{log.event}</span>
+                  <span className="truncate" style={{ color: 'var(--text-primary)' }}>
+                    {log.event}
+                    {log.session_id && (
+                      <span style={{
+                        marginLeft: 6, fontSize: 10, color: 'var(--cyan)', cursor: 'pointer',
+                        textDecoration: 'underline',
+                      }} onClick={(e) => { e.stopPropagation(); handleOpenSession(log.session_id!); }}>
+                        → 打开会话
+                      </span>
+                    )}
+                  </span>
                   <span onClick={(e) => e.stopPropagation()}>
                     <button className="btn btn-danger btn-sm" onClick={() => handleDelete(log.id)}
                       style={{ fontSize: 10, padding: '2px 6px' }} title="删除">✕</button>
@@ -204,7 +246,16 @@ export default function Logs() {
             }}>{selectedLog.level}</span></div>
             <div><span style={{ color: 'var(--text-dim)' }}>组件:</span> {selectedLog.component}</div>
             <div><span style={{ color: 'var(--text-dim)' }}>事件:</span> {selectedLog.event}</div>
-            {selectedLog.session_id && <div><span style={{ color: 'var(--text-dim)' }}>会话:</span> <code style={{ fontSize: 11 }}>{selectedLog.session_id}</code></div>}
+            {selectedLog.session_id && (
+              <div>
+                <span style={{ color: 'var(--text-dim)' }}>会话:</span>{' '}
+                <code style={{ fontSize: 11, cursor: 'pointer', color: 'var(--cyan)' }}
+                  onClick={() => handleOpenSession(selectedLog.session_id!)}
+                  title="点击打开会话">
+                  {sessionNames[selectedLog.session_id] || selectedLog.session_id.slice(0, 20)}
+                </code>
+              </div>
+            )}
             {selectedLog.summary && (
               <div style={{ marginTop: 8 }}>
                 <div style={{ color: 'var(--text-dim)', marginBottom: 4 }}>摘要:</div>

@@ -54,6 +54,11 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   // 快捷键面板是否显示
   const [showShortcuts, setShowShortcuts] = useState(false);
 
+  // 左侧会话列表面板显隐
+  const [showLeftPanel, setShowLeftPanel] = useState(true);
+  // 右侧上下文面板显隐
+  const [showRightPanel, setShowRightPanel] = useState(true);
+
   // 组件挂载时：加载配置和会话列表，自动恢复最近一次会话
   useEffect(() => {
     // 获取配置
@@ -80,16 +85,16 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 从 Home 页面导航过来时，恢复指定的会话
+  // 从 Home / Sessions / Logs 页面导航过来时，恢复指定的会话
   useEffect(() => {
     // 从路由状态中提取会话信息
     const state = location.state as { sessionId?: string; projectDir?: string } | undefined;
     // 如果带有 sessionId，则切换到该会话
     if (state?.sessionId) {
-      handleSelectSession(state.sessionId);
+      handleSelectSession(state.sessionId, state.projectDir);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location]);
+  }, [location.key]);
 
   // 选择/切换会话的回调函数
   const handleSelectSession = useCallback(async (sid: string, projectDir?: string) => {
@@ -491,11 +496,18 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
         </button>
         <button className="btn btn-danger btn-sm" onClick={handleStop} disabled={!isRunning}>■ 停止运行</button>
         <div style={{ flex: 1 }} />
+        <button className={`btn btn-sm ${showLeftPanel ? 'btn-secondary' : ''}`} onClick={() => setShowLeftPanel(!showLeftPanel)} title="切换会话列表" style={{ fontSize: 11, padding: '4px 8px' }}>
+          {showLeftPanel ? '◧ 隐藏会话' : '◧ 显示会话'}
+        </button>
+        <button className={`btn btn-sm ${showRightPanel ? 'btn-secondary' : ''}`} onClick={() => setShowRightPanel(!showRightPanel)} title="切换上下文" style={{ fontSize: 11, padding: '4px 8px' }}>
+          {showRightPanel ? '◨ 隐藏面板' : '◨ 显示面板'}
+        </button>
         <button className="btn btn-secondary btn-sm" onClick={() => setShowShortcuts(true)} title="快捷键" style={{ fontSize: 11, padding: '4px 8px' }}>? 快捷键</button>
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <div style={{ width: 200, borderRight: '1px solid var(--border-color)', padding: 8, overflow: 'auto', flexShrink: 0 }}>
+        {showLeftPanel && (
+          <div style={{ width: 200, borderRight: '1px solid var(--border-color)', padding: 8, overflow: 'auto', flexShrink: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>会话历史</span>
             {sessionId && (
@@ -524,7 +536,8 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
               />
             ))
           )}
-        </div>
+          </div>
+        )}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -590,6 +603,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
           </div>
         </div>
 
+        {showRightPanel && (
         <div style={{ width: 220, borderLeft: '1px solid var(--border-color)', padding: 12, overflow: 'auto', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -644,6 +658,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
             </>
           )}
         </div>
+        )}
       </div>
 
       <div style={{
