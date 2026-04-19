@@ -18,6 +18,7 @@ interface LogEntry {
   event: string | null; // 事件名
   summary: string | null;  // 摘要描述
   session_id: string | null; // 关联会话 ID
+  content: string | null;    // 输入/输出文本内容
 }
 
 /**
@@ -73,18 +74,20 @@ export function listLogs(
  * @param event - 事件名
  * @param summary - 摘要描述
  * @param sessionId - 可选，关联会话 ID
+ * @param content - 可选，输入/输出文本内容
  */
 export function addLog(
   component: string,
   level: string,
   event: string,
   summary: string,
-  sessionId?: string
+  sessionId?: string,
+  content?: string
 ): void {
   const db = getDb();
   db.prepare(
-    'INSERT INTO logs (component, level, event, summary, session_id) VALUES (?, ?, ?, ?, ?)'
-  ).run(component, level, event, summary, sessionId || null);
+    'INSERT INTO logs (component, level, event, summary, session_id, content) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(component, level, event, summary, sessionId || null, content || null);
 }
 
 /**
@@ -114,7 +117,7 @@ export function exportLogs(filePath: string, format: string): void {
 export function generateDiagnostic(filePath: string): void {
   // 动态引入 os 模块获取系统信息
   const os = require('node:os');
-  // 获取最近 100 条日志
+  // 获取最近 100 条日志（含内容）
   const logs = listLogs({ limit: 100 });
   // 组装诊断数据
   const diag = {
@@ -125,7 +128,7 @@ export function generateDiagnostic(filePath: string): void {
     memoryUsage: process.memoryUsage(),         // 内存使用情况
     uptime: process.uptime(),                   // 进程运行时间
     logDir: LOG_DIR,                            // 日志目录路径
-    recentLogs: logs.slice(0, 20),              // 最近 20 条日志
+    recentLogs: logs.slice(0, 20),              // 最近 20 条日志（含 content 字段）
   };
   fs.writeFileSync(filePath, JSON.stringify(diag, null, 2), 'utf-8');
 }

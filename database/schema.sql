@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS logs (
     level TEXT DEFAULT 'info',
     event TEXT,
     summary TEXT,
-    session_id TEXT REFERENCES sessions(id)
+    session_id TEXT REFERENCES sessions(id),
+    content TEXT
 );
 
 CREATE TABLE IF NOT EXISTS plugins (

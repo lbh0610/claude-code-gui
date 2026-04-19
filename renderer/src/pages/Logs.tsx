@@ -10,6 +10,7 @@ interface LogEntry {
   event: string | null;  // 事件名称（可为空）
   summary: string | null; // 摘要内容（可为空）
   session_id: string | null; // 关联的会话ID（可为空）
+  content: string | null;    // 输入/输出文本内容
 }
 
 // Logs 页面主组件：日志查看与管理
@@ -211,6 +212,16 @@ export default function Logs() {
                   padding: 8, background: 'var(--bg-primary)', borderRadius: 4,
                   fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
                 }}>{selectedLog.summary}</div>
+              </div>
+            )}
+            {selectedLog.content && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ color: 'var(--text-dim)', marginBottom: 4 }}>内容:</div>
+                <div style={{
+                  padding: 8, background: 'var(--bg-primary)', borderRadius: 4,
+                  fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                  maxHeight: 300, overflow: 'auto', fontFamily: 'var(--font-mono)',
+                }}>{selectedLog.content}</div>
               </div>
             )}
           </div>

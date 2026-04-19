@@ -234,6 +234,10 @@ export async function startSession(
               cacheCreationTokens: usage ? (usage.cache_creation_input_tokens as number | undefined) ?? 0 : 0,
               cacheReadTokens: usage ? (usage.cache_read_input_tokens as number | undefined) ?? 0 : 0,
             });
+            // 记录 AI 输出内容到日志（截断到 2000 字符）
+            if (assistantTurnText) {
+              addLog('cli', 'info', 'assistant_output', `AI 回复: ${assistantTurnText.slice(0, 100)}`, sessionId, assistantTurnText.slice(0, 2000));
+            }
             // 清空累积数据，为下一轮做准备
             assistantTurnText = '';
             assistantTurnThinking = '';
@@ -398,7 +402,7 @@ export function registerCliHandlers(ipcMain: Electron.IpcMain): void {
   // 发送输入
   ipcMain.handle('cli:input', (_, { sessionId, input }) => {
     sendInput(sessionId, input);
-    addLog('cli', 'info', 'input_sent', `向会话 ${sessionId} 发送输入`, sessionId);
+    addLog('cli', 'info', 'input_sent', `向会话 ${sessionId} 发送输入: ${input.slice(0, 100)}`, sessionId, input);
   });
   // 查询状态
   ipcMain.handle('cli:status', () => getStatus());
