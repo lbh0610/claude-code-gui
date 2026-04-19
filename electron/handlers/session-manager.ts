@@ -1,4 +1,5 @@
 import { getDb } from '../database';
+import { addLog } from './log-manager';
 
 /**
  * 会话管理器：会话 CRUD，关联项目目录
@@ -98,8 +99,15 @@ export function updateSessionStatus(sessionId: string, status: string): void {
 
 export function registerSessionHandlers(ipcMain: Electron.IpcMain): void {
   ipcMain.handle('session:list', (_, { projectId }: { projectId?: string }) => listSessions(projectId));
-  ipcMain.handle('session:create', (_, data: { projectDir: string; name: string }) => createSession(data));
-  ipcMain.handle('session:delete', (_, sessionId: string) => deleteSession(sessionId));
+  ipcMain.handle('session:create', (_, data: { projectDir: string; name: string }) => {
+    const result = createSession(data);
+    addLog('session', 'info', 'session_created', `会话 ${result.id} 已创建 (${data.projectDir})`, result.id);
+    return result;
+  });
+  ipcMain.handle('session:delete', (_, sessionId: string) => {
+    deleteSession(sessionId);
+    addLog('session', 'info', 'session_deleted', `会话 ${sessionId} 已删除`, sessionId);
+  });
   ipcMain.handle('session:rename', (_, { sessionId, name }: { sessionId: string; name: string }) => renameSession(sessionId, name));
   ipcMain.handle('session:messages:save', (_, { sessionId, role, content, timestamp, thinking, toolSteps, cost, duration, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens }: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[]; cost?: number; duration?: number; inputTokens?: number; outputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number }) =>
     saveMessage(sessionId, role, content, timestamp, thinking, toolSteps, cost, duration, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)

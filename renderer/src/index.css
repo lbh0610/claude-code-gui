@@ -323,11 +323,13 @@ body {
 
 [data-theme="light"] .chat-content code {
   background: rgba(0, 0, 0, 0.06);
+  color: #1A202C;
 }
 
 [data-theme="light"] .chat-content pre {
   background: #F7FAFC;
   border: 1px solid var(--border-color);
+  color: #1A202C;
 }
 
 [data-theme="light"] .code-block-header {
@@ -336,4 +338,18 @@ body {
 
 [data-theme="light"] .code-block-wrapper {
   background: #F7FAFC;
+}
+
+[data-theme="light"] .code-block-wrapper code {
+  color: #1A202C !important;
+}
+
+[data-theme="light"] .chat-content pre code {
+  color: #1A202C !important;
+}
+
+/* 覆盖 rehype-highlight 在亮色主题下的浅色文字 */
+[data-theme="light"] .hljs {
+  background: #F7FAFC;
+  color: #1A202C;
 }

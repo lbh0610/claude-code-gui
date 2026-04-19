@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import { BrowserWindow } from 'electron';
 import { getCliPath } from '../config';
+import { addLog } from './log-manager';
 
 /**
  * CLI 进程管理器
@@ -192,10 +193,12 @@ export async function startSession(
     });
 
     child.on('exit', (code, signal) => {
+      const exitCode = code ?? -1;
       sessions.delete(sessionId);
+      addLog('cli', exitCode === 0 ? 'info' : 'warn', 'session_exited', `会话 ${sessionId} 退出 (code: ${exitCode}, signal: ${signal ?? 'unknown'})`, sessionId);
       sendToRenderer('cli-exit', {
         sessionId,
-        code: code ?? -1,
+        code: exitCode,
         signal: signal ?? 'unknown',
       });
       sendToRenderer('cli-status', { status: 'stopped', pid: null });
@@ -290,10 +293,22 @@ export function getStatus(): { status: string; pid: number | null; sessionCount:
 }
 
 export function registerCliHandlers(ipcMain: Electron.IpcMain): void {
-  ipcMain.handle('cli:start', (_, { sessionId, projectDir, config }) =>
-    startSession(sessionId, projectDir, config)
-  );
-  ipcMain.handle('cli:stop', (_, sessionId: string) => stopSession(sessionId));
-  ipcMain.handle('cli:input', (_, { sessionId, input }) => sendInput(sessionId, input));
+  ipcMain.handle('cli:start', async (_, { sessionId, projectDir, config }) => {
+    const result = await startSession(sessionId, projectDir, config);
+    if (result.ok) {
+      addLog('cli', 'info', 'session_started', `会话 ${sessionId} 已启动 (PID: ${result.pid})`, sessionId);
+    } else {
+      addLog('cli', 'error', 'session_start_failed', `会话 ${sessionId} 启动失败: ${result.msg}`, sessionId);
+    }
+    return result;
+  });
+  ipcMain.handle('cli:stop', (_, sessionId: string) => {
+    stopSession(sessionId);
+    addLog('cli', 'info', 'session_stopped', `会话 ${sessionId} 已停止`, sessionId);
+  });
+  ipcMain.handle('cli:input', (_, { sessionId, input }) => {
+    sendInput(sessionId, input);
+    addLog('cli', 'info', 'input_sent', `向会话 ${sessionId} 发送输入`, sessionId);
+  });
   ipcMain.handle('cli:status', () => getStatus());
 }

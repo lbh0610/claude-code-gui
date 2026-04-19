@@ -18,7 +18,7 @@ interface LogEntry {
 }
 
 export function listLogs(
-  filter?: { level?: string; component?: string; sessionId?: string; limit?: number }
+  filter?: { level?: string; component?: string; sessionId?: string; search?: string; limit?: number }
 ): LogEntry[] {
   const db = getDb();
   let sql = 'SELECT * FROM logs WHERE 1=1';
@@ -35,6 +35,11 @@ export function listLogs(
   if (filter?.sessionId) {
     sql += ' AND session_id = ?';
     params.push(filter.sessionId);
+  }
+  if (filter?.search) {
+    sql += ' AND (event LIKE ? OR summary LIKE ? OR component LIKE ?)';
+    const like = `%${filter.search}%`;
+    params.push(like, like, like);
   }
 
   sql += ' ORDER BY timestamp DESC';
@@ -87,6 +92,14 @@ export function generateDiagnostic(filePath: string): void {
   fs.writeFileSync(filePath, JSON.stringify(diag, null, 2), 'utf-8');
 }
 
+export function clearLogs(): void {
+  getDb().prepare('DELETE FROM logs').run();
+}
+
+export function deleteLog(id: number): void {
+  getDb().prepare('DELETE FROM logs WHERE id = ?').run(id);
+}
+
 export function registerLogHandlers(ipcMain: Electron.IpcMain): void {
   ipcMain.handle('log:list', (_, filter) => listLogs(filter));
   ipcMain.handle('log:export', (_, { filePath, format }: { filePath: string; format: string }) =>
@@ -95,4 +108,6 @@ export function registerLogHandlers(ipcMain: Electron.IpcMain): void {
   ipcMain.handle('log:diagnostic', (_, { filePath }: { filePath: string }) =>
     generateDiagnostic(filePath)
   );
+  ipcMain.handle('log:delete', (_, id: number) => deleteLog(id));
+  ipcMain.handle('log:clear', () => clearLogs());
 }

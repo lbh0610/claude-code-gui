@@ -26,10 +26,22 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   // 会话内消息搜索
   const [msgSearch, setMsgSearch] = useState('');
 
-  // 加载配置和会话列表
+  // 加载配置和会话列表，自动恢复上次会话
   useEffect(() => {
-    api.config.get().then(setConfig).catch(() => {});
-    api.session.list().then((s) => setSessions(s as { id: string; name: string; project_dir: string }[])).catch(() => {});
+    api.config.get().then(cfg => {
+      setConfig(cfg);
+      // 恢复主题
+      if (cfg.theme && typeof cfg.theme === 'string') {
+        onThemeChange?.(cfg.theme);
+      }
+    }).catch(() => {});
+    api.session.list().then((s) => {
+      setSessions(s as { id: string; name: string; project_dir: string }[]);
+      // 自动选择最近的会话（列表第一个）
+      if (s.length > 0) {
+        handleSelectSession(s[0].id);
+      }
+    }).catch(() => {});
   }, []);
 
   // 选择会话
@@ -68,6 +80,9 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
       const session = sessions.find(s => s.id === sid);
       if (session) {
         setProjectDir(session.project_dir);
+        // 保存最近会话
+        const newConfig = { ...config, lastSessionId: sid };
+        api.config.save(newConfig).catch(() => {});
         const startResult = await api.cli.start(sid, session.project_dir, config);
         if (startResult.ok) setIsRunning(true);
       }

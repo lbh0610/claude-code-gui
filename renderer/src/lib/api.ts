@@ -35,6 +35,8 @@ export interface ElectronAPI {
     list: (filter?: Record<string, unknown>) => Promise<unknown[]>;
     export: (filePath: string, format: string) => Promise<void>;
     diagnostic: (filePath: string) => Promise<void>;
+    delete: (id: number) => Promise<void>;
+    clear: () => Promise<void>;
   };
   plugin: {
     list: () => Promise<unknown[]>;
@@ -102,6 +104,8 @@ function getApi(): ElectronAPI {
       list: () => Promise.resolve([]),
       export: () => Promise.resolve(),
       diagnostic: () => Promise.resolve(),
+      delete: () => Promise.resolve(),
+      clear: () => Promise.resolve(),
     },
     plugin: {
       list: () => Promise.resolve([]),

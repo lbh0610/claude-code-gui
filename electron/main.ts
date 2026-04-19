@@ -10,6 +10,7 @@ import { registerPluginHandlers } from './handlers/plugin-manager';
 import { registerSkillHandlers } from './handlers/skill-manager';
 import { registerUpdateHandlers } from './handlers/updater';
 import { APP_VERSION, APP_NAME } from './config';
+import { addLog } from './handlers/log-manager';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -86,6 +87,7 @@ app.whenReady().then(() => {
   ensureDirs();
   registerHandlers();
   createWindow();
+  addLog('app', 'info', 'app_started', `应用已启动 v${APP_VERSION} (${process.platform} ${process.arch})`);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
