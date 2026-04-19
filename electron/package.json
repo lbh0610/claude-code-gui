@@ -1,0 +1,9 @@
+{
+  "name": "electron-main",
+  "private": true,
+  "version": "0.1.0",
+  "main": "dist/main.js",
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12"
+  }
+}

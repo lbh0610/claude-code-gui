@@ -1,0 +1,24 @@
+{
+  "appId": "com.agentworkbench.app",
+  "productName": "Agent Workbench",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "electron/dist/**/*",
+    "renderer/dist/**/*",
+    "database/schema.sql",
+    "config/default.json"
+  ],
+  "mac": {
+    "target": { "target": "dmg", "arch": ["arm64"] },
+    "category": "public.app-category.developer-tools",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist"
+  },
+  "extraResources": [
+    { "from": "native-bin/", "to": "native-bin/", "filter": ["**/*"] }
+  ]
+}

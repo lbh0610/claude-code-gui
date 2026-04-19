@@ -1,0 +1,8 @@
+node_modules
+dist
+release
+*.d.ts
+*.d.ts.map
+.DS_Store
+.env
+native-bin

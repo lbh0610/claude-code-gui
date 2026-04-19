@@ -1,0 +1,32 @@
+{
+  "name": "claude-code-gui",
+  "main": "electron/dist/main.js",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "electron",
+    "renderer"
+  ],
+  "description": "可视化 Agent Workbench — Claude Code 桌面 GUI",
+  "scripts": {
+    "dev:renderer": "vite --config renderer/vite.config.ts",
+    "build:renderer": "vite build --config renderer/vite.config.ts",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build": "npm run build:renderer && npm run build:electron",
+    "dev": "cross-env NODE_ENV=development concurrently \"npm run dev:renderer\" \"sleep 2 && npx electron .\"",
+    "start": "cross-env NODE_ENV=development npx electron .",
+    "package": "electron-builder",
+    "package:mac": "electron-builder --mac --arm64"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^12.9.0",
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "node-pty": "^1.1.0"
+  }
+}

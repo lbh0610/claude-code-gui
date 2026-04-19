@@ -1,0 +1,13 @@
+{
+  "cliPath": "",
+  "apiKey": "",
+  "gatewayUrl": "",
+  "model": "claude-sonnet-4-6-20250514",
+  "proxy": "",
+  "autoStartVideo": true,
+  "autoCheckUpdate": true,
+  "theme": "dark",
+  "envVariables": {},
+  "pluginWhitelist": [],
+  "enterpriseMode": false
+}

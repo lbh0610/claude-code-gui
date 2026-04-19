@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "rootDir": ".",
+    "noEmit": false,
+    "baseUrl": "../",
+    "paths": {
+      "node-pty": ["node_modules/node-pty"]
+    }
+  },
+  "include": ["**/*.ts"]
+}
