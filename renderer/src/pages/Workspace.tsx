@@ -102,8 +102,8 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
       if (dir) {
         setProjectDir(dir);
         // 保存最近会话
-        const newConfig = { ...config, lastSessionId: sid };
-        api.config.save(newConfig).catch(() => {});
+        // 保存最近会话（后端会合并到已有配置）
+        api.config.save({ lastSessionId: sid }).catch(() => {});
         const startResult = await api.cli.start(sid, dir, config);
         if (startResult.ok) setIsRunning(true);
       }

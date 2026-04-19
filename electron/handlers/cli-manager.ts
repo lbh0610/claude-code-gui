@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { BrowserWindow } from 'electron';
 import { getCliPath } from '../config';
 import { addLog } from './log-manager';
+import { decryptValue } from './config-manager';
 
 /**
  * CLI 进程管理器
@@ -54,11 +55,13 @@ export async function startSession(
     const env = { ...process.env };
 
     if (config.apiKey && typeof config.apiKey === 'string') {
-      const apiKey = config.apiKey as string;
-      // 跳过已加密的 key（enc: 开头），防止膨胀
-      if (!apiKey.startsWith('enc:') && apiKey.length < 10000) {
-        env.ANTHROPIC_API_KEY = apiKey;
+      const keyRaw = decryptValue(config.apiKey as string);
+      if (keyRaw && keyRaw.length < 10000) {
+        env.ANTHROPIC_API_KEY = keyRaw;
       }
+    }
+    if (config.gatewayUrl && typeof config.gatewayUrl === 'string') {
+      env.ANTHROPIC_BASE_URL = config.gatewayUrl as string;
     }
     if (config.proxy && typeof config.proxy === 'string') {
       env.HTTPS_PROXY = config.proxy;

@@ -31,15 +31,19 @@ export function loadConfig(): Record<string, unknown> {
   }
 }
 
-function saveConfig(config: Record<string, unknown>): void {
+function saveConfig(updates: Record<string, unknown>): void {
+  // 先读取磁盘上已有配置，合并后再写入（防止部分保存覆盖其他字段）
+  const existing = loadConfig();
+  const merged = { ...existing, ...updates };
+
   // API Key 加密存储（跳过已加密的值）
-  if (config.apiKey && typeof config.apiKey === 'string' && config.apiKey.length > 0) {
-    const key = config.apiKey as string;
+  if (merged.apiKey && typeof merged.apiKey === 'string' && merged.apiKey.length > 0) {
+    const key = merged.apiKey as string;
     if (!key.startsWith('enc:')) {
-      config.apiKey = encryptValue(key);
+      merged.apiKey = encryptValue(key);
     }
   }
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf-8');
 }
 
 function encryptValue(value: string): string {
@@ -87,14 +91,23 @@ async function testConnection(config: Record<string, unknown>): Promise<{ ok: bo
   }
 
   try {
-    // 简单连通性测试
+    // 构建请求 URL
+    let url = gatewayUrl;
+    // 如果 base URL 不以 /v1 结尾，追加 /v1/messages（Anthropic 格式）
+    if (!gatewayUrl.endsWith('/v1') && !gatewayUrl.endsWith('/v1/')) {
+      url = `${gatewayUrl}/v1/messages`;
+    } else if (gatewayUrl.endsWith('/v1')) {
+      url = `${gatewayUrl}/messages`;
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
-    const resp = await fetch(`${gatewayUrl}/v1/messages`, {
+    const resp = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey || '',
+        'Authorization': `Bearer ${apiKey}`,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -107,7 +120,6 @@ async function testConnection(config: Record<string, unknown>): Promise<{ ok: bo
     clearTimeout(timeout);
 
     if (resp.ok || resp.status === 400) {
-      // 400 表示 key 有效但请求参数不完整（正常）
       return { ok: true, msg: '连接成功' };
     }
     const text = await resp.text();
