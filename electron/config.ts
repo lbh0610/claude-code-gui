@@ -35,14 +35,18 @@ export function getCliPath(cliPathOverride?: string): string {
   if (cliPathOverride) return cliPathOverride;
 
   const { execSync } = require('child_process');
+  const isWindows = process.platform === 'win32';
+
   try {
-    return execSync('which claude', { encoding: 'utf-8' }).trim();
+    // Windows 使用 where，macOS/Linux 使用 which
+    const cmd = isWindows ? 'where claude' : 'which claude';
+    const result = execSync(cmd, { encoding: 'utf-8' }).trim();
+    // where 可能返回多行，取第一行
+    return isWindows ? result.split('\r\n')[0] : result;
   } catch {
-    return path.join(
-      app.isPackaged ? process.resourcesPath : app.getAppPath(),
-      'native-bin',
-      'claude'
-    );
+    const baseDir = app.isPackaged ? process.resourcesPath : app.getAppPath();
+    // Windows 上需要 .cmd 后缀
+    return path.join(baseDir, 'native-bin', isWindows ? 'claude.cmd' : 'claude');
   }
 }
 
