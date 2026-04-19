@@ -19,7 +19,7 @@ const DEFAULT_CONFIG: Record<string, unknown> = {
  * 配置管理器：JSON 文件读写，API Key 加密存储
  */
 
-function loadConfig(): Record<string, unknown> {
+export function loadConfig(): Record<string, unknown> {
   if (!fs.existsSync(CONFIG_PATH)) {
     return { ...DEFAULT_CONFIG };
   }
@@ -53,7 +53,7 @@ function encryptValue(value: string): string {
   return `enc:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
 }
 
-function decryptValue(encrypted: string): string {
+export function decryptValue(encrypted: string): string {
   if (!encrypted.startsWith('enc:')) return encrypted;
   const parts = encrypted.split(':');
   if (parts.length !== 4) return encrypted;

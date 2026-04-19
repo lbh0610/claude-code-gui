@@ -5,10 +5,9 @@ const NAV_ITEMS = [
   { path: '/workspace', icon: '◫', label: '项目工作区' },
   { path: '/sessions', icon: '◷', label: '会话历史' },
   { path: '/logs', icon: '☰', label: '日志诊断' },
-  { path: '/plugins', icon: '⧉', label: '插件管理' },
   { path: '/settings', icon: '⚙', label: '设置中心' },
   { path: '/skills', icon: '★', label: 'Skills 管理' },
-  { path: '/updates', icon: '↻', label: '更新管理' },
+  { path: '/plugins', icon: '⊞', label: '系统诊断' },
 ];
 
 export default function Sidebar() {

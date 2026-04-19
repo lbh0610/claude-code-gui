@@ -8,6 +8,7 @@ import { registerSessionHandlers } from './handlers/session-manager';
 import { registerLogHandlers } from './handlers/log-manager';
 import { registerPluginHandlers } from './handlers/plugin-manager';
 import { registerSkillHandlers } from './handlers/skill-manager';
+import { registerDiagnosticHandlers } from './handlers/diagnostics-manager';
 import { registerUpdateHandlers } from './handlers/updater';
 import { APP_VERSION, APP_NAME } from './config';
 import { addLog } from './handlers/log-manager';
@@ -57,6 +58,7 @@ function registerHandlers(): void {
   registerLogHandlers(ipcMain);
   registerPluginHandlers(ipcMain);
   registerSkillHandlers(ipcMain);
+  registerDiagnosticHandlers(ipcMain);
   registerUpdateHandlers(ipcMain);
 
   // 文件系统操作

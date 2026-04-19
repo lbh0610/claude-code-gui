@@ -1,143 +1,203 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 
-interface Plugin {
-  id: string;
-  name: string;
-  version: string;
-  enabled: number;
-  source: string | null;
-  created_at: string;
+interface DiagInfo {
+  system: {
+    platform: string; arch: string; hostname: string; nodeVersion: string;
+    uptime: string; totalMemory: string; freeMemory: string;
+    cpuCores: number; cpuModel: string;
+  };
+  config: {
+    configured: boolean; apiKey: string; model: string;
+    gatewayUrl: string; proxy: string; systemPrompt: boolean;
+    envVars: number; fileExists: boolean;
+  };
+  db: {
+    dbPath: string; dbSize: string; sessions: number;
+    messages: number; logs: number; plugins: number; skills: number;
+  };
+  disk: {
+    appDir: string; appDirSize: string; dbSizeBytes: number;
+    configSizeBytes: number; logCount: number;
+    pluginDir: string; pluginDirExists: boolean;
+  };
+  cli: {
+    status: string; pid: number | null; sessionCount: number;
+    cliPath: string; cliExists: boolean;
+  };
+  timestamp: string;
 }
 
-const BUILTIN_PLUGINS = [
-  { id: 'core-cli', name: 'CLI 核心', version: '0.1.0', desc: 'CLI 进程管理核心模块', source: 'built-in' },
-  { id: 'config-mgr', name: '配置管理', version: '0.1.0', desc: '配置读写与加密存储', source: 'built-in' },
-  { id: 'session-mgr', name: '会话管理', version: '0.1.0', desc: '会话生命周期管理', source: 'built-in' },
-  { id: 'log-sys', name: '日志系统', version: '0.1.0', desc: '结构化日志与诊断', source: 'built-in' },
-  { id: 'updater', name: '更新管理器', version: '0.1.0', desc: '版本检查与离线补丁', source: 'built-in' },
-];
-
 export default function Plugins() {
-  const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [diag, setDiag] = useState<DiagInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionResult, setActionResult] = useState<string | null>(null);
 
-  useEffect(() => { loadPlugins(); }, []);
+  useEffect(() => { loadDiag(); }, []);
 
-  const loadPlugins = async () => {
-    const data = await api.plugin.list() as Plugin[];
-    const existingIds = new Set(data.map((p: Plugin) => p.id));
-    const builtins = BUILTIN_PLUGINS.filter((b) => !existingIds.has(b.id));
-    const all = [...data, ...builtins.map((b) => ({
-      ...b,
-      enabled: 1,
-      created_at: new Date().toISOString(),
-    }))];
-    setPlugins(all);
+  const loadDiag = async () => {
+    setLoading(true);
+    try {
+      const data = await api.diagnostic.get() as DiagInfo;
+      setDiag(data);
+    } catch { /* ignore */ }
+    setLoading(false);
   };
 
-  const handleToggle = async (id: string, enabled: boolean) => {
-    if (BUILTIN_PLUGINS.find((b) => b.id === id)) return;
-    await api.plugin.toggle(id, enabled);
-    loadPlugins();
+  const handleClearLogs = async () => {
+    try {
+      await api.log.clear();
+      setActionResult('日志已清除');
+      loadDiag();
+      setTimeout(() => setActionResult(null), 3000);
+    } catch { /* ignore */ }
   };
 
-  const handleBatchToggle = async (enabled: boolean) => {
-    const toggleable = plugins.filter(p => p.source !== 'built-in' && selectedIds.has(p.id));
-    for (const p of toggleable) await api.plugin.toggle(p.id, enabled);
-    setSelectedIds(new Set());
-    await loadPlugins();
+  const handleTestConnection = async () => {
+    try {
+      const config = await api.config.get() as Record<string, unknown>;
+      const result = await api.config.testConnection(config) as { ok: boolean; msg: string };
+      setActionResult(result.msg);
+      setTimeout(() => setActionResult(null), 5000);
+    } catch (e: unknown) {
+      setActionResult(e instanceof Error ? e.message : '测试失败');
+      setTimeout(() => setActionResult(null), 5000);
+    }
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
-  };
+  if (loading) {
+    return (
+      <div style={{ padding: 24, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <div style={{ fontSize: 14, color: 'var(--text-dim)' }}>正在收集诊断信息...</div>
+      </div>
+    );
+  }
 
-  const toggleSelectAll = () => {
-    const userPlugins = plugins.filter(p => p.source !== 'built-in');
-    setSelectedIds(selectedIds.size === userPlugins.length ? new Set() : new Set(userPlugins.map(p => p.id)));
-  };
-
-  const userPlugins = plugins.filter(p => p.source !== 'built-in');
+  if (!diag) {
+    return (
+      <div style={{ padding: 24, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <div style={{ fontSize: 14, color: 'var(--warn)' }}>诊断信息加载失败</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 24, overflow: 'auto', height: '100%' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 20, color: 'var(--cyan)' }}>
-        插件管理
+        系统诊断中心
       </h1>
 
-      {/* 批量操作栏 */}
-      {userPlugins.length > 1 && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
-          <input type="checkbox" checked={selectedIds.size === userPlugins.length && userPlugins.length > 0}
-            onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>全选</span>
-          {selectedIds.size > 0 && (
-            <>
-              <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>已选 {selectedIds.size} 项</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => handleBatchToggle(true)}>全部启用</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => handleBatchToggle(false)}>全部禁用</button>
-            </>
-          )}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {plugins.map((plugin) => {
-          const isBuiltin = plugin.source === 'built-in';
-          return (
-            <div
-              key={plugin.id}
-              className="card"
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                opacity: plugin.enabled ? 1 : 0.6,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {!isBuiltin && (
-                  <input type="checkbox" checked={selectedIds.has(plugin.id)}
-                    onChange={() => toggleSelect(plugin.id)} style={{ cursor: 'pointer' }} />
-                )}
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-                    {plugin.name}
-                    <span style={{
-                      fontSize: 10,
-                      marginLeft: 8,
-                      padding: '2px 6px',
-                      borderRadius: 3,
-                      background: isBuiltin ? 'rgba(0,229,255,0.1)' : 'rgba(124,77,255,0.1)',
-                      color: isBuiltin ? 'var(--cyan)' : 'var(--purple)',
-                    }}>
-                      {plugin.source || 'local'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-                    v{plugin.version} · {plugin.id}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 11, color: plugin.enabled ? 'var(--success)' : 'var(--text-dim)' }}>
-                  {plugin.enabled ? '已启用' : '已禁用'}
-                </span>
-                {!isBuiltin && (
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleToggle(plugin.id, !plugin.enabled)}
-                  >
-                    {plugin.enabled ? '禁用' : '启用'}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+      {/* 操作栏 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+        <button className="btn btn-secondary btn-sm" onClick={loadDiag}>刷新诊断</button>
+        <button className="btn btn-secondary btn-sm" onClick={handleTestConnection}>测试连接</button>
+        <button className="btn btn-secondary btn-sm" onClick={handleClearLogs}>清除日志</button>
+        {actionResult && (
+          <span style={{ fontSize: 12, color: 'var(--success)', alignSelf: 'center' }}>{actionResult}</span>
+        )}
       </div>
+
+      <div style={{ display: 'grid', gap: 20 }}>
+        {/* 系统信息 */}
+        <DiagCard title="系统环境" icon="◈" color="var(--cyan)">
+          <DiagRow label="操作系统" value={diag.system.platform} />
+          <DiagRow label="架构" value={diag.system.arch} />
+          <DiagRow label="主机名" value={diag.system.hostname} />
+          <DiagRow label="CPU" value={`${diag.system.cpuModel} (${diag.system.cpuCores} 核)`} />
+          <DiagRow label="内存" value={`${diag.system.freeMemory} / ${diag.system.totalMemory}`} />
+          <DiagRow label="Node.js" value={`v${diag.system.nodeVersion}`} />
+          <DiagRow label="应用运行时间" value={diag.system.uptime} />
+        </DiagCard>
+
+        {/* 配置状态 */}
+        <DiagCard title="配置状态" icon="⚙" color="var(--purple)">
+          <DiagRow label="配置文件" value={diag.config.fileExists ? '已加载' : '不存在'} status={diag.config.fileExists ? 'ok' : 'warn'} />
+          <DiagRow label="API Key" value={diag.config.apiKey} status={diag.config.configured ? 'ok' : 'error'} />
+          <DiagRow label="模型" value={diag.config.model} />
+          <DiagRow label="网关" value={diag.config.gatewayUrl} />
+          <DiagRow label="代理" value={diag.config.proxy} />
+          <DiagRow label="系统提示词" value={diag.config.systemPrompt ? '已配置' : '未配置'} />
+          <DiagRow label="自定义环境变量" value={`${diag.config.envVars} 项`} />
+        </DiagCard>
+
+        {/* 数据库统计 */}
+        <DiagCard title="数据库" icon="▦" color="var(--success)">
+          <DiagRow label="数据库大小" value={diag.db.dbSize} />
+          <DiagRow label="路径" value={diag.db.dbPath} mono />
+          <DiagRow label="会话数" value={diag.db.sessions} />
+          <DiagRow label="消息数" value={diag.db.messages} />
+          <DiagRow label="日志条目" value={diag.db.logs} />
+          <DiagRow label="Skills" value={diag.db.skills} />
+        </DiagCard>
+
+        {/* CLI 状态 */}
+        <DiagCard title="CLI 引擎" icon="⚡" color="var(--warn)">
+          <DiagRow
+            label="状态"
+            value={diag.cli.status === 'running' ? '运行中' : diag.cli.status === 'idle' ? '空闲' : '错误'}
+            status={diag.cli.status === 'running' ? 'ok' : diag.cli.status === 'idle' ? 'warn' : 'error'}
+          />
+          {diag.cli.pid && <DiagRow label="进程 ID" value={String(diag.cli.pid)} mono />}
+          <DiagRow label="活跃会话" value={String(diag.cli.sessionCount)} />
+          <DiagRow
+            label="CLI 路径"
+            value={diag.cli.cliExists ? diag.cli.cliPath : '未找到'}
+            status={diag.cli.cliExists ? 'ok' : 'error'}
+            mono
+          />
+        </DiagCard>
+
+        {/* 存储用量 */}
+        <DiagCard title="存储用量" icon="▤" color="var(--text-secondary)">
+          <DiagRow label="数据目录" value={diag.disk.appDir} mono />
+          <DiagRow label="目录总大小" value={diag.disk.appDirSize} />
+          <DiagRow label="数据库" value={formatBytes(diag.disk.dbSizeBytes)} />
+          <DiagRow label="配置文件" value={formatBytes(diag.disk.configSizeBytes)} />
+          <DiagRow label="插件目录" value={diag.disk.pluginDirExists ? '存在' : '不存在'} />
+        </DiagCard>
+      </div>
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function DiagCard({ title, icon, color, children }: {
+  title: string; icon: string; color: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="card" style={{ padding: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <span style={{ fontSize: 16, color }}>{icon}</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DiagRow({ label, value, status, mono }: {
+  label: string; value: string | number; status?: 'ok' | 'warn' | 'error'; mono?: boolean;
+}) {
+  const statusColor = status === 'ok' ? 'var(--success)' : status === 'warn' ? 'var(--warn)' : status === 'error' ? 'var(--danger)' : undefined;
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <span style={{ fontSize: 12, color: 'var(--text-dim)', minWidth: 120 }}>{label}</span>
+      <span style={{
+        fontSize: 12, color: statusColor || 'var(--text-secondary)',
+        fontFamily: mono ? 'var(--font-mono)' : undefined,
+        maxWidth: 400, textAlign: 'right',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </span>
     </div>
   );
 }

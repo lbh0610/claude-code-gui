@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import ChatBubble, { ChatMessage } from '../components/ChatBubble';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 export default function Workspace({ theme, onThemeChange }: { theme?: string; onThemeChange?: (t: string) => void }) {
+  const location = useLocation();
   const [projectDir, setProjectDir] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -49,6 +51,15 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
     api.skill.list().catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 从 Home 导航过来的会话
+  useEffect(() => {
+    const state = location.state as { sessionId?: string; projectDir?: string } | undefined;
+    if (state?.sessionId) {
+      handleSelectSession(state.sessionId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
 
   // 选择会话
   const handleSelectSession = useCallback(async (sid: string, projectDir?: string) => {

@@ -68,6 +68,9 @@ export interface ElectronAPI {
     getVersion: () => Promise<string>;
     getPlatform: () => Promise<unknown>;
   };
+  diagnostic: {
+    get: () => Promise<unknown>;
+  };
 }
 
 declare global {
@@ -141,6 +144,9 @@ function getApi(): ElectronAPI {
     app: {
       getVersion: () => Promise.resolve('0.1.0'),
       getPlatform: () => Promise.resolve('mock'),
+    },
+    diagnostic: {
+      get: () => Promise.resolve({ system: {}, config: {}, db: {}, disk: {}, cli: {} }),
     },
   };
 }

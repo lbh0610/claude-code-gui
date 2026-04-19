@@ -113,6 +113,11 @@ const electronAPI = {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
   },
+
+  // 系统诊断
+  diagnostic: {
+    get: () => ipcRenderer.invoke('diagnostic:get'),
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
