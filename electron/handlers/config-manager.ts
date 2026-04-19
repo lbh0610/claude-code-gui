@@ -115,8 +115,30 @@ async function testConnection(config: Record<string, unknown>): Promise<{ ok: bo
   }
 }
 
+export function getConfigExport(): Record<string, unknown> {
+  const config = loadConfig();
+  // 导出时保留加密的 API Key
+  return config;
+}
+
+export function importConfig(filePath: string): { ok: boolean; msg: string } {
+  try {
+    if (!fs.existsSync(filePath)) return { ok: false, msg: '文件不存在' };
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const imported = JSON.parse(raw);
+    if (typeof imported !== 'object' || Array.isArray(imported)) return { ok: false, msg: '配置文件格式无效' };
+    saveConfig({ ...loadConfig(), ...imported });
+    return { ok: true, msg: `已导入 ${Object.keys(imported).length} 项配置` };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, msg: `导入失败: ${msg}` };
+  }
+}
+
 export function registerConfigHandlers(ipcMain: Electron.IpcMain): void {
   ipcMain.handle('config:get', () => getConfigForRenderer());
   ipcMain.handle('config:save', (_, config: Record<string, unknown>) => saveConfig(config));
   ipcMain.handle('config:testConnection', (_, config: Record<string, unknown>) => testConnection(config));
+  ipcMain.handle('config:export', () => getConfigExport());
+  ipcMain.handle('config:import', (_, filePath: string) => importConfig(filePath));
 }

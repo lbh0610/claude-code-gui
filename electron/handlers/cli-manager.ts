@@ -63,6 +63,9 @@ export async function startSession(
     if (config.envVariables && typeof config.envVariables === 'object') {
       Object.assign(env, config.envVariables);
     }
+    if (config.systemPrompt && typeof config.systemPrompt === 'string' && config.enableSystemPrompt !== false) {
+      env.CLAUDE_CODE_SYSTEM_PROMPT = config.systemPrompt;
+    }
 
     const args: string[] = [
       '-p',

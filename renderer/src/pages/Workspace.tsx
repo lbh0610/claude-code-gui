@@ -27,6 +27,9 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   // 会话内消息搜索
   const [msgSearch, setMsgSearch] = useState('');
 
+  // 快捷键面板
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
   // 加载配置和会话列表，自动恢复上次会话
   useEffect(() => {
     api.config.get().then(cfg => {
@@ -260,6 +263,9 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
         e.preventDefault();
         handleSendInput();
       }
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        setShowShortcuts(prev => !prev);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -370,6 +376,8 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
           ↻ 继续会话
         </button>
         <button className="btn btn-danger btn-sm" onClick={handleStop} disabled={!isRunning}>■ 停止运行</button>
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowShortcuts(true)} title="快捷键" style={{ fontSize: 11, padding: '4px 8px' }}>? 快捷键</button>
       </div>
 
       {/* 主内容区 */}
@@ -440,6 +448,17 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
               <div ref={messagesEndRef} />
             </div>
           </ErrorBoundary>
+
+          {/* 快捷命令 */}
+          <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {QUICK_COMMANDS.map((cmd, i) => (
+              <button key={i} onClick={() => setInputText(prev => prev ? prev + '\n' + cmd.text : cmd.text)}
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: 11, padding: '2px 8px', color: 'var(--cyan)' }}>
+                {cmd.label}
+              </button>
+            ))}
+          </div>
 
           {/* 输入区 — 多行 textarea */}
           <div style={{ display: 'flex', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--border-color)', background: 'var(--bg-card)', flexShrink: 0 }}>
@@ -538,9 +557,53 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
         )}
         {tokenSummary.cost > 0 && <span>| ${tokenSummary.cost.toFixed(4)}</span>}
       </div>
+
+      {/* 快捷键面板 Modal */}
+      {showShortcuts && (
+        <div onClick={() => setShowShortcuts(false)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: 'var(--bg-card)', borderRadius: 12, padding: 24, maxWidth: 420, width: '90%',
+            border: '1px solid var(--border-color)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>快捷键</h3>
+              <button className="btn btn-sm" onClick={() => setShowShortcuts(false)} style={{ fontSize: 14, color: 'var(--text-dim)' }}>✕</button>
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 2.2 }}>
+              {SHORTCUTS.map((s, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>{s.label}</span>
+                  <kbd style={{
+                    padding: '2px 8px', background: 'var(--bg-primary)', borderRadius: 4,
+                    border: '1px solid var(--border-color)', fontFamily: 'var(--font-mono)',
+                    fontSize: 11, color: 'var(--text-primary)',
+                  }}>{s.key}</kbd>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const SHORTCUTS = [
+  { key: '⌘/Ctrl + Enter', label: '发送消息' },
+  { key: 'Shift + Enter', label: '输入换行' },
+  { key: '?', label: '显示/隐藏快捷键' },
+];
+
+const QUICK_COMMANDS = [
+  { label: '解释代码', text: '请解释这段代码的作用：' },
+  { label: '优化建议', text: '这段代码有什么可以优化的地方？' },
+  { label: '写测试', text: '请为这段代码编写单元测试：' },
+  { label: '生成注释', text: '请为以下代码生成详细的中文注释：' },
+  { label: '查找 Bug', text: '帮我检查以下代码是否存在潜在问题：' },
+];
 
 function formatNum(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';

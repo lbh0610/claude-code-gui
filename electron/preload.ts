@@ -11,6 +11,8 @@ const electronAPI = {
     get: () => ipcRenderer.invoke('config:get'),
     save: (config: Record<string, unknown>) => ipcRenderer.invoke('config:save', config),
     testConnection: (config: Record<string, unknown>) => ipcRenderer.invoke('config:testConnection', config),
+    export: () => ipcRenderer.invoke('config:export'),
+    import: (filePath: string) => ipcRenderer.invoke('config:import', filePath),
   },
 
   // CLI 进程管理

@@ -9,6 +9,8 @@ export interface ElectronAPI {
     get: () => Promise<Record<string, unknown>>;
     save: (config: Record<string, unknown>) => Promise<void>;
     testConnection: (config: Record<string, unknown>) => Promise<{ ok: boolean; msg: string }>;
+    export: () => Promise<Record<string, unknown>>;
+    import: (filePath: string) => Promise<{ ok: boolean; msg: string }>;
   };
   cli: {
     start: (sessionId: string, projectDir: string, config: Record<string, unknown>) => Promise<{ ok: boolean; pid: number | null; msg?: string }>;
@@ -81,6 +83,8 @@ function getApi(): ElectronAPI {
       get: () => Promise.resolve({}),
       save: () => Promise.resolve(),
       testConnection: () => Promise.resolve({ ok: true, msg: 'mock' }),
+      export: () => Promise.resolve({}),
+      import: () => Promise.resolve({ ok: false, msg: 'mock' }),
     },
     cli: {
       start: () => Promise.resolve({ ok: true, pid: null, msg: 'mock: 仅在 Electron 环境中可用' }),

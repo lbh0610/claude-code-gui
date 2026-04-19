@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 
 const SETTINGS_SECTIONS = [
   { id: 'general', label: '通用' },
+  { id: 'systemPrompt', label: '系统提示词' },
   { id: 'account', label: '账号与密钥' },
   { id: 'gateway', label: '模型与网关' },
   { id: 'proxy', label: '代理' },
@@ -186,6 +187,90 @@ export default function Settings() {
               onChange={(e) => setConfig({ ...config, cliPath: e.target.value })}
               style={{ marginBottom: 16 }}
             />
+
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>配置导入/导出</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <button className="btn btn-secondary btn-sm" onClick={async () => {
+                const data = await api.config.export();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `config-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+              }}>导出配置</button>
+              <button className="btn btn-secondary btn-sm" onClick={async () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = async (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (!file) return;
+                  const text = await file.text();
+                  const result = await api.config.import(text);
+                  alert(result.msg);
+                  if (result.ok) api.config.get().then(setConfig).catch(() => {});
+                };
+                input.click();
+              }}>导入配置</button>
+            </div>
+
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+              {saving ? '保存中...' : '保存'}
+            </button>
+          </div>
+        )}
+
+        {activeSection === 'systemPrompt' && (
+          <div style={{ maxWidth: 500 }}>
+            <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <input
+                type="checkbox"
+                checked={Boolean(config.enableSystemPrompt)}
+                onChange={(e) => setConfig({ ...config, enableSystemPrompt: e.target.checked })}
+              />
+              启用系统提示词
+            </label>
+
+            <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>
+              系统提示词
+            </label>
+            <textarea
+              className="input"
+              rows={8}
+              placeholder="输入自定义系统提示词..."
+              value={String(config.systemPrompt || '')}
+              onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })}
+              style={{
+                marginBottom: 16,
+                fontFamily: 'monospace',
+                resize: 'vertical',
+              }}
+            />
+
+            <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--text-secondary)' }}>
+              快速预设
+            </label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setConfig({ ...config, systemPrompt: (config.systemPrompt as string || '') + '回答必须简洁，直接给出代码实现，不要冗长解释。' })}
+              >
+                简洁模式
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setConfig({ ...config, systemPrompt: (config.systemPrompt as string || '') + '所有代码注释使用中文编写。' })}
+              >
+                中文注释
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setConfig({ ...config, systemPrompt: (config.systemPrompt as string || '') + '你是一个资深前端工程师，擅长 React、TypeScript 和现代 Web 开发。' })}
+              >
+                前端专家
+              </button>
+            </div>
+
             <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
               {saving ? '保存中...' : '保存'}
             </button>
