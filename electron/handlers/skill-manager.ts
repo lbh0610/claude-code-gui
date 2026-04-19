@@ -3,56 +3,33 @@ import path from 'node:path';
 import { getDb } from '../database';
 import { SKILLS_PATH } from '../config';
 
-/**
- * Skills 管理器：扫描 ~/.claude/skills/ 目录，管理 SKILL.md
- */
-
 interface SkillInfo {
   id: string;
   name: string;
   description: string;
   content: string;
-  frontmatter: string;
-  hasAgents: boolean;
-  hasReferences: boolean;
-  hasScripts: boolean;
   subdirs: string[];
   enabled: boolean;
 }
 
-function ensureSkillsDir(): void {
-  if (!fs.existsSync(SKILLS_PATH)) {
-    fs.mkdirSync(SKILLS_PATH, { recursive: true });
-  }
-}
-
-function parseFrontmatter(md: string): { frontmatter: string; name: string; description: string; content: string } {
+function parseSkill(id: string): SkillInfo | null {
+  const dir = path.join(SKILLS_PATH, id);
+  const skillPath = path.join(dir, 'SKILL.md');
+  if (!fs.existsSync(skillPath)) return null;
+  const md = fs.readFileSync(skillPath, 'utf-8');
   const match = md.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!match) {
-    return { frontmatter: '', name: '', description: '', content: md };
-  }
-  const [, fm, body] = match;
+  const fm = match ? match[1] : '';
   const nameMatch = fm.match(/name:\s*(.+)/);
   const descMatch = fm.match(/description:\s*(.+)/);
+  const entries = fs.readdirSync(dir);
   return {
-    frontmatter: fm.trim(),
-    name: nameMatch ? nameMatch[1].trim() : '',
+    id,
+    name: nameMatch ? nameMatch[1].trim() : id,
     description: descMatch ? descMatch[1].trim() : '',
-    content: body.trim(),
+    content: match ? match[2].trim() : md,
+    subdirs: entries.filter(e => fs.statSync(path.join(dir, e)).isDirectory()),
+    enabled: getSkillEnabled(id),
   };
-}
-
-function buildFrontmatter(name: string, description: string): string {
-  return `name: ${name}\ndescription: ${description}`;
-}
-
-function listSkillIds(): string[] {
-  ensureSkillsDir();
-  try {
-    return fs.readdirSync(SKILLS_PATH).filter(d => fs.statSync(path.join(SKILLS_PATH, d)).isDirectory());
-  } catch {
-    return [];
-  }
 }
 
 function getSkillEnabled(id: string): boolean {
@@ -62,90 +39,49 @@ function getSkillEnabled(id: string): boolean {
 }
 
 export function listSkills(): SkillInfo[] {
-  const ids = listSkillIds();
-  return ids
-    .map(id => {
-      const skillPath = path.join(SKILLS_PATH, id, 'SKILL.md');
-      if (!fs.existsSync(skillPath)) return null;
-      const md = fs.readFileSync(skillPath, 'utf-8');
-      const { frontmatter, name, description, content } = parseFrontmatter(md);
-      const entries = fs.readdirSync(path.join(SKILLS_PATH, id));
-      const subdirs = entries.filter(e => fs.statSync(path.join(SKILLS_PATH, id, e)).isDirectory());
-      return {
-        id,
-        name: name || id,
-        description,
-        content,
-        frontmatter,
-        hasAgents: entries.includes('agents'),
-        hasReferences: entries.includes('references'),
-        hasScripts: entries.includes('scripts'),
-        subdirs,
-        enabled: getSkillEnabled(id),
-      };
-    })
-    .filter((s): s is SkillInfo => s !== null);
+  if (!fs.existsSync(SKILLS_PATH)) fs.mkdirSync(SKILLS_PATH, { recursive: true });
+  try {
+    return fs.readdirSync(SKILLS_PATH)
+      .filter(d => fs.statSync(path.join(SKILLS_PATH, d)).isDirectory())
+      .map(parseSkill)
+      .filter((s): s is SkillInfo => s !== null);
+  } catch {
+    return [];
+  }
 }
 
 export function getSkill(id: string): SkillInfo | null {
-  const skillPath = path.join(SKILLS_PATH, id, 'SKILL.md');
-  if (!fs.existsSync(skillPath)) return null;
-  const md = fs.readFileSync(skillPath, 'utf-8');
-  const { frontmatter, name, description, content } = parseFrontmatter(md);
-  const entries = fs.readdirSync(path.join(SKILLS_PATH, id));
-  const subdirs = entries.filter(e => fs.statSync(path.join(SKILLS_PATH, id, e)).isDirectory());
-  return {
-    id,
-    name: name || id,
-    description,
-    content,
-    frontmatter,
-    hasAgents: entries.includes('agents'),
-    hasReferences: entries.includes('references'),
-    hasScripts: entries.includes('scripts'),
-    subdirs,
-    enabled: getSkillEnabled(id),
-  };
+  return parseSkill(id);
 }
 
 export function createSkill(name: string, description: string, content: string): { ok: boolean; id: string; msg?: string } {
-  ensureSkillsDir();
-  // 生成 slug
+  if (!fs.existsSync(SKILLS_PATH)) fs.mkdirSync(SKILLS_PATH, { recursive: true });
   const id = name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-').replace(/^-|-$/g, '').slice(0, 64);
   if (!id) return { ok: false, id: '', msg: '名称无效' };
-
   const dir = path.join(SKILLS_PATH, id);
   if (fs.existsSync(dir)) return { ok: false, id: '', msg: 'Skill 已存在' };
-
   fs.mkdirSync(dir, { recursive: true });
-  const md = `---\n${buildFrontmatter(name, description)}\n---\n\n${content}`;
-  fs.writeFileSync(path.join(dir, 'SKILL.md'), md, 'utf-8');
+  fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}`, 'utf-8');
   return { ok: true, id };
 }
 
 export function updateSkill(id: string, name: string, description: string, content: string): { ok: boolean; msg?: string } {
   const dir = path.join(SKILLS_PATH, id);
   if (!fs.existsSync(dir)) return { ok: false, msg: 'Skill 不存在' };
-
-  const skillPath = path.join(dir, 'SKILL.md');
-  const md = `---\n${buildFrontmatter(name, description)}\n---\n\n${content}`;
-  fs.writeFileSync(skillPath, md, 'utf-8');
+  fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}`, 'utf-8');
   return { ok: true };
 }
 
 export function deleteSkill(id: string): { ok: boolean; msg?: string } {
   const dir = path.join(SKILLS_PATH, id);
   if (!fs.existsSync(dir)) return { ok: false, msg: 'Skill 不存在' };
-
   fs.rmSync(dir, { recursive: true, force: true });
-  const db = getDb();
-  db.prepare('DELETE FROM user_skills WHERE id = ?').run(id);
+  getDb().prepare('DELETE FROM user_skills WHERE id = ?').run(id);
   return { ok: true };
 }
 
 export function toggleSkill(id: string, enabled: boolean): void {
-  const db = getDb();
-  db.prepare(
+  getDb().prepare(
     "INSERT INTO user_skills (id, enabled) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET enabled = ?, updated_at = datetime('now')"
   ).run(id, enabled ? 1 : 0, enabled ? 1 : 0);
 }

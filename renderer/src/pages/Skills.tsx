@@ -8,9 +8,6 @@ interface Skill {
   name: string;
   description: string;
   content: string;
-  hasAgents: boolean;
-  hasReferences: boolean;
-  hasScripts: boolean;
   subdirs: string[];
   enabled: boolean;
 }

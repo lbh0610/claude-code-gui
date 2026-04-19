@@ -47,7 +47,7 @@ export interface ElectronAPI {
   };
   skill: {
     list: () => Promise<{ id: string; name: string; description: string; enabled: boolean }[]>;
-    get: (id: string) => Promise<{ id: string; name: string; description: string; content: string; hasAgents: boolean; hasReferences: boolean; hasScripts: boolean; subdirs: string[]; enabled: boolean } | null>;
+    get: (id: string) => Promise<{ id: string; name: string; description: string; content: string; subdirs: string[]; enabled: boolean } | null>;
     create: (data: { name: string; description: string; content: string }) => Promise<{ ok: boolean; id: string; msg?: string }>;
     update: (data: { id: string; name: string; description: string; content: string }) => Promise<{ ok: boolean; msg?: string }>;
     delete: (id: string) => Promise<{ ok: boolean; msg?: string }>;
@@ -92,6 +92,7 @@ function getApi(): ElectronAPI {
       list: () => Promise.resolve([]),
       create: () => Promise.resolve({ id: 'mock-session', name: '新会话' }),
       delete: () => Promise.resolve(),
+      rename: () => Promise.resolve(),
       messages: {
         save: () => Promise.resolve(),
         load: () => Promise.resolve([]),

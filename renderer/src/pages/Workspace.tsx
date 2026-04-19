@@ -101,21 +101,13 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
     return api.cli.onTask((data) => {
       setTaskEvents((prev) => [...prev.slice(-200), { type: data.type, subtype: data.subtype, summary: data.summary, raw: data.raw, timestamp: data.timestamp }]);
 
-      if (data.type === 'system' && data.subtype === 'init') {
-        const msgId = `task_sys_init_${data.timestamp}`;
+      if ((data.type === 'system' && data.subtype === 'init') || data.type === 'result') {
+        const msgId = `${data.type}_${data.subtype}_${data.timestamp}`;
         if (!taskMsgIdsRef.current.has(msgId)) {
           taskMsgIdsRef.current.add(msgId);
           const sysMsg: ChatMessage = { role: 'system', content: data.summary, timestamp: data.timestamp };
           setMessages((prev) => [...prev.slice(-500), sysMsg]);
-          if (sessionId) api.session.messages.save({ sessionId, role: sysMsg.role, content: sysMsg.content, timestamp: sysMsg.timestamp });
-        }
-      } else if (data.type === 'result') {
-        const msgId = `task_result_${data.timestamp}`;
-        if (!taskMsgIdsRef.current.has(msgId)) {
-          taskMsgIdsRef.current.add(msgId);
-          const resultMsg: ChatMessage = { role: 'system', content: data.summary, timestamp: data.timestamp };
-          setMessages((prev) => [...prev.slice(-500), resultMsg]);
-          if (sessionId) api.session.messages.save({ sessionId, role: resultMsg.role, content: resultMsg.content, timestamp: resultMsg.timestamp });
+          if (sessionId) api.session.messages.save({ sessionId, role: 'system', content: data.summary, timestamp: data.timestamp });
         }
       }
     });
@@ -573,7 +565,7 @@ function SessionItem({
 }
 
 /** 任务事件项 */
-function TaskEventItem({ event }: { event: { type: string; subtype: string; summary: string; raw: string; timestamp: number }; index: number }) {
+function TaskEventItem({ event }: { event: { type: string; subtype: string; summary: string; raw: string; timestamp: number } }) {
   const [expanded, setExpanded] = useState(false);
 
   const typeColor: Record<string, string> = { system: 'var(--cyan)', assistant: 'var(--purple)', result: 'var(--success)', user: 'var(--text-primary)' };
