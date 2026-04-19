@@ -10,6 +10,8 @@ const electronAPI = {
     testConnection: (config: Record<string, unknown>) => ipcRenderer.invoke('config:testConnection', config),
     export: () => ipcRenderer.invoke('config:export'),
     import: (filePath: string) => ipcRenderer.invoke('config:import', filePath),
+    // 从 Claude CLI 配置自动导入
+    importFromClaude: () => ipcRenderer.invoke('config:importFromClaude'),
   },
 
   // CLI 进程管理 API：启动、停止、发送输入、查询状态及订阅各类事件
@@ -19,6 +21,16 @@ const electronAPI = {
     stop: (sessionId: string) => ipcRenderer.invoke('cli:stop', sessionId),
     input: (sessionId: string, input: string) => ipcRenderer.invoke('cli:input', { sessionId, input }),
     status: () => ipcRenderer.invoke('cli:status'),
+    // 检测系统 PATH 中是否已安装 claude
+    detect: () => ipcRenderer.invoke('cli:detect'),
+    // 安装 claude（useNpx=true 则用 npx 模式，否则全局 npm 安装）
+    install: (useNpx: boolean) => ipcRenderer.invoke('cli:install', useNpx),
+    // 监听安装进度事件
+    onInstallProgress: (cb: (msg: string) => void) => {
+      const handler = (_: unknown, msg: string) => cb(msg);
+      ipcRenderer.on('cli-install-progress', handler);
+      return () => ipcRenderer.removeListener('cli-install-progress', handler);
+    },
     // 监听 CLI 输出事件（标准输出/标准错误），回调函数接收会话 ID、输出类型和文本内容
     onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => void) => {
       const handler = (_: unknown, data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => cb(data);

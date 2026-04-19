@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { app } from 'electron';
 import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 
 /** 应用数据根目录，指向 Electron 的用户数据目录 */
 export const APP_DATA_DIR = app.getPath('userData');
@@ -27,26 +28,103 @@ export const APP_VERSION = app.getVersion() || '0.1.0';
 export const APP_NAME = app.getName() || 'Agent Workbench';
 
 /**
+ * 检测 claude CLI 是否已在系统 PATH 中
+ * @returns claude 可执行文件的绝对路径，不存在则返回 null
+ */
+export function detectCli(): string | null {
+  const isWindows = process.platform === 'win32';
+  try {
+    const cmd = isWindows ? 'where claude' : 'which claude';
+    const result = execSync(cmd, { encoding: 'utf-8', timeout: 5000 }).trim();
+    if (!result) return null;
+    return isWindows ? result.split('\r\n')[0] : result;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 获取 CLI 可执行文件的绝对路径
- * @param cliPathOverride - 用户自定义的 CLI 路径，若提供则直接返回
- * @returns CLI 可执行文件的完整路径；优先使用系统 PATH 中的 claude，兜底使用随包分发的二进制文件
+ * 优先使用系统 PATH 中的 claude，兜底使用随包分发的二进制文件
+ * @param cliPathOverride - 用户自定义的 CLI 路径
+ * @returns CLI 可执行文件的完整路径
  */
 export function getCliPath(cliPathOverride?: string): string {
   if (cliPathOverride) return cliPathOverride;
 
-  const { execSync } = require('child_process');
+  const detected = detectCli();
+  if (detected) return detected;
+
+  // 兜底：随包分发的二进制文件
+  const baseDir = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  const isWindows = process.platform === 'win32';
+  return path.join(baseDir, 'native-bin', isWindows ? 'claude.cmd' : 'claude');
+}
+
+/**
+ * 异步安装 claude CLI（通过 npm 全局安装）
+ * @param onProgress - 进度回调函数
+ * @returns 安装结果：成功返回 claude 路径，失败返回错误信息
+ */
+export async function installCli(
+  onProgress?: (msg: string) => void
+): Promise<{ ok: boolean; path?: string; error?: string }> {
   const isWindows = process.platform === 'win32';
 
+  onProgress?.('正在安装 Claude CLI，请稍候...');
+
   try {
-    // Windows 使用 where，macOS/Linux 使用 which
-    const cmd = isWindows ? 'where claude' : 'which claude';
-    const result = execSync(cmd, { encoding: 'utf-8' }).trim();
-    // where 可能返回多行，取第一行
-    return isWindows ? result.split('\r\n')[0] : result;
+    execSync(
+      isWindows
+        ? 'npm install -g @anthropic-ai/claude-code'
+        : 'npm install -g @anthropic-ai/claude-code',
+      {
+        stdio: 'pipe',
+        timeout: 300000, // 5 分钟超时
+        env: { ...process.env, CI: '1' },
+      }
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `安装失败: ${msg}` };
+  }
+
+  // 安装完成后检测路径
+  onProgress?.('安装完成，正在验证...');
+  const cliPath = detectCli();
+  if (cliPath) {
+    onProgress?.(`验证成功: ${cliPath}`);
+    return { ok: true, path: cliPath };
+  }
+  return { ok: false, error: '安装完成但未找到 claude，请检查 npm 全局路径' };
+}
+
+/**
+ * 读取 Claude CLI 自带的配置（~/.claude/settings.json）
+ * @returns 提取到的配置对象
+ */
+export function readClaudeCliConfig(): {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  hasConfig: boolean;
+} {
+  const settingsPath = path.join(app.getPath('home'), '.claude', 'settings.json');
+  try {
+    if (!fs.existsSync(settingsPath)) return { hasConfig: false };
+
+    const raw = fs.readFileSync(settingsPath, 'utf-8');
+    const settings = JSON.parse(raw);
+    const env = settings.env as Record<string, unknown> | undefined;
+
+    return {
+      apiKey: env?.ANTHROPIC_API_KEY as string | undefined,
+      baseUrl: env?.ANTHROPIC_BASE_URL as string | undefined,
+      model: env?.ANTHROPIC_MODEL as string | undefined,
+      hasConfig: !!(env?.ANTHROPIC_API_KEY || env?.ANTHROPIC_BASE_URL),
+    };
   } catch {
-    const baseDir = app.isPackaged ? process.resourcesPath : app.getAppPath();
-    // Windows 上需要 .cmd 后缀
-    return path.join(baseDir, 'native-bin', isWindows ? 'claude.cmd' : 'claude');
+    return { hasConfig: false };
   }
 }
 

@@ -3,7 +3,9 @@ import fs from 'node:fs';
 // 引入加密模块，用于 AES-256-GCM 加解密
 import crypto from 'node:crypto';
 // 引入配置路径常量，指向 config.json 的完整路径
-import { CONFIG_PATH } from '../config';
+import { CONFIG_PATH, detectCli, installCli, readClaudeCliConfig } from '../config';
+// 引入 Electron BrowserWindow，用于发送安装进度事件
+import { BrowserWindow } from 'electron';
 
 // 默认配置对象，所有键值对作为缺失字段的兜底值
 const DEFAULT_CONFIG: Record<string, unknown> = {
@@ -43,7 +45,7 @@ export function loadConfig(): Record<string, unknown> {
  * 保存配置更新，采用读-合并-写策略防止部分保存覆盖其他字段
  * @param updates - 需要更新的配置键值对
  */
-function saveConfig(updates: Record<string, unknown>): void {
+export function saveConfig(updates: Record<string, unknown>): void {
   // 先读取磁盘上已有配置
   const existing = loadConfig();
   // 合并已有配置和新更新
@@ -238,4 +240,63 @@ export function registerConfigHandlers(ipcMain: Electron.IpcMain): void {
   ipcMain.handle('config:export', () => getConfigExport());
   // 导入配置
   ipcMain.handle('config:import', (_, filePath: string) => importConfig(filePath));
+
+  // CLI 检测
+  ipcMain.handle('cli:detect', () => {
+    const path = detectCli();
+    return { found: !!path, path };
+  });
+
+  // CLI 安装（异步，带进度回调）
+  ipcMain.handle('cli:install', async (_, useNpx: boolean) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    if (!window) return { ok: false, error: '无可用窗口' };
+
+    const sendProgress = (msg: string) => {
+      window.webContents.send('cli-install-progress', msg);
+    };
+
+    try {
+      if (useNpx) {
+        // 方案 A：通过 npx 临时调用（无需全局安装）
+        sendProgress('使用 npx 模式，无需全局安装');
+        return { ok: true, mode: 'npx', path: 'npx' };
+      } else {
+        // 方案 B：全局 npm 安装
+        const result = await installCli(sendProgress);
+        return result;
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: msg };
+    }
+  });
+
+  // 从 Claude CLI 配置导入
+  ipcMain.handle('config:importFromClaude', () => {
+    const cliConfig = readClaudeCliConfig();
+    if (!cliConfig.hasConfig) {
+      return { ok: false, msg: '未找到 Claude CLI 配置 (~/.claude/settings.json)' };
+    }
+
+    // 将提取的配置合并到应用配置
+    const updates: Record<string, unknown> = {};
+    if (cliConfig.apiKey) {
+      // 加密存储 API Key
+      updates.apiKey = encryptValue(cliConfig.apiKey);
+    }
+    if (cliConfig.baseUrl) {
+      updates.gatewayUrl = cliConfig.baseUrl;
+    }
+    if (cliConfig.model) {
+      updates.model = cliConfig.model;
+    }
+    saveConfig(updates);
+
+    const imported = [];
+    if (cliConfig.apiKey) imported.push('API Key');
+    if (cliConfig.baseUrl) imported.push('网关地址');
+    if (cliConfig.model) imported.push('模型');
+    return { ok: true, msg: `已导入: ${imported.join(', ')}` };
+  });
 }

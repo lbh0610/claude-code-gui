@@ -1,7 +1,7 @@
 // Electron 主进程入口
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
-import { ensureDirs } from './config';
+import { ensureDirs, detectCli, readClaudeCliConfig, CONFIG_PATH } from './config';
 import { closeDb } from './database';
 import { registerConfigHandlers } from './handlers/config-manager';
 import { registerCliHandlers, setMainWindow } from './handlers/cli-manager';
@@ -13,9 +13,39 @@ import { registerDiagnosticHandlers } from './handlers/diagnostics-manager';
 import { registerUpdateHandlers } from './handlers/updater';
 import { APP_VERSION, APP_NAME } from './config';
 import { addLog } from './handlers/log-manager';
+import { saveConfig } from './handlers/config-manager';
+import fs from 'node:fs';
 
 // 主窗口引用
 let mainWindow: BrowserWindow | null = null;
+
+/**
+ * 首次启动时自动从 Claude CLI 配置导入
+ * 仅在 config.json 不存在且 ~/.claude/settings.json 有配置时执行
+ */
+function autoImportFromClaudeCli(): void {
+  if (fs.existsSync(CONFIG_PATH)) {
+    addLog('app', 'info', 'auto_import_skipped', '配置文件已存在，跳过自动导入');
+    return;
+  }
+
+  const cliConfig = readClaudeCliConfig();
+  if (!cliConfig.hasConfig) {
+    addLog('app', 'info', 'auto_import_no_cli_config', '未找到 Claude CLI 配置');
+    return;
+  }
+
+  const updates: Record<string, unknown> = {};
+  if (cliConfig.apiKey) updates.apiKey = cliConfig.apiKey;
+  if (cliConfig.baseUrl) updates.gatewayUrl = cliConfig.baseUrl;
+  if (cliConfig.model) updates.model = cliConfig.model;
+
+  if (Object.keys(updates).length > 0) {
+    saveConfig(updates);
+    const items = Object.keys(updates).join(', ');
+    addLog('app', 'info', 'auto_imported', `已从 Claude CLI 自动导入配置: ${items}`);
+  }
+}
 
 // 创建主窗口并配置窗口参数、安全策略及开发/生产环境加载逻辑
 function createWindow(): void {
@@ -108,6 +138,10 @@ function registerHandlers(): void {
 app.whenReady().then(() => {
   ensureDirs();
   registerHandlers();
+
+  // 首次启动自动从 Claude CLI 配置导入
+  autoImportFromClaudeCli();
+
   createWindow();
   addLog('app', 'info', 'app_started', `应用已启动 v${APP_VERSION} (${process.platform} ${process.arch})`);
 

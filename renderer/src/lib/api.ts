@@ -7,6 +7,7 @@ export interface ElectronAPI {
     testConnection: (config: Record<string, unknown>) => Promise<{ ok: boolean; msg: string }>;
     export: () => Promise<Record<string, unknown>>;
     import: (filePath: string) => Promise<{ ok: boolean; msg: string }>;
+    importFromClaude: () => Promise<{ ok: boolean; msg: string }>;
   };
   // CLI 引擎：启动、停止、输入、状态、事件监听
   cli: {
@@ -14,6 +15,9 @@ export interface ElectronAPI {
     stop: (sessionId: string) => Promise<void>;
     input: (sessionId: string, input: string) => Promise<void>;
     status: () => Promise<{ status: string; pid: number | null; sessionCount: number }>;
+    detect: () => Promise<{ found: boolean; path: string | null }>;
+    install: (useNpx: boolean) => Promise<{ ok: boolean; path?: string; error?: string; mode?: string }>;
+    onInstallProgress: (cb: (msg: string) => void) => () => void;
     // 输出事件监听回调注册器，返回取消订阅函数
     onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[]; role?: 'user' | 'assistant' | 'system'; msgId?: string; cost?: number; duration?: number; inputTokens?: number; outputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number }) => void) => () => void;
     // 流式更新事件监听
@@ -103,12 +107,16 @@ function getApi(): ElectronAPI {
       testConnection: () => Promise.resolve({ ok: true, msg: 'mock' }),
       export: () => Promise.resolve({}),
       import: () => Promise.resolve({ ok: false, msg: 'mock' }),
+      importFromClaude: () => Promise.resolve({ ok: false, msg: 'mock' }),
     },
     cli: {
       start: () => Promise.resolve({ ok: true, pid: null, msg: 'mock: 仅在 Electron 环境中可用' }),
       stop: () => Promise.resolve(),
       input: () => Promise.resolve(),
       status: () => Promise.resolve({ status: 'idle', pid: null, sessionCount: 0 }),
+      detect: () => Promise.resolve({ found: false, path: null }),
+      install: () => Promise.resolve({ ok: true, mode: 'mock' }),
+      onInstallProgress: () => () => {},
       onOutput: () => () => {},
       onExit: () => () => {},
       onStatus: () => () => {},
