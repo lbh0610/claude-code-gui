@@ -15,6 +15,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const seenMsgIds = useRef(new Set<string>());
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const isFirstUserMsg = useRef(true);
 
   // 任务执行流
   const [showTaskPanel, setShowTaskPanel] = useState(false);
@@ -56,7 +57,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
       setMsgSearch('');
 
       const msgs = await api.session.messages.load(sid) as { role: string; content: string; thinking: string | null; tool_steps: string | null; cost: number | null; duration: number | null; input_tokens: number | null; output_tokens: number | null; cache_creation_tokens: number | null; cache_read_tokens: number | null; timestamp: number }[];
-      setMessages((msgs || []).map(m => {
+      const parsedMsgs = (msgs || []).map(m => {
         let parsedSteps: unknown[] | undefined;
         if (m?.tool_steps) {
           try { parsedSteps = JSON.parse(m.tool_steps); } catch { /* ignore */ }
@@ -74,7 +75,10 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
           cacheReadTokens: m?.cache_read_tokens ?? undefined,
           timestamp: m?.timestamp || Date.now(),
         };
-      }));
+      });
+      setMessages(parsedMsgs);
+      // 如果已有用户消息，说明不是第一次对话
+      isFirstUserMsg.current = !parsedMsgs.some(m => m.role === 'user');
       setStreamingMsg(null);
 
       const session = sessions.find(s => s.id === sid);
@@ -89,6 +93,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
     } catch (err) {
       console.error('[handleSelectSession] error:', err);
       setMessages([{ role: 'system' as const, content: `加载会话失败: ${err instanceof Error ? err.message : String(err)}`, timestamp: Date.now() }]);
+      isFirstUserMsg.current = false;
     }
   }, [sessions, config, sessionId, isRunning]);
 
@@ -180,6 +185,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
     setTaskEvents([]);
     setStreamingMsg(null);
     setMsgSearch('');
+    isFirstUserMsg.current = true;
     api.session.list().then((s) => setSessions(s as { id: string; name: string; project_dir: string }[])).catch(() => {});
 
     const startResult = await api.cli.start(result.id, dir, config);
@@ -202,6 +208,17 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
       const userMsg: ChatMessage = { role: 'user', content: inputText.trim(), timestamp: Date.now() };
       setMessages((prev) => [...prev, userMsg]);
       await api.session.messages.save({ sessionId, role: 'user', content: inputText.trim(), timestamp: userMsg.timestamp });
+
+      // 第一条用户消息：自动生成标题
+      if (isFirstUserMsg.current) {
+        isFirstUserMsg.current = false;
+        const title = generateTitle(inputText.trim());
+        if (title) {
+          await api.session.autoTitle({ sessionId, title });
+          api.session.list().then((s) => setSessions(s as { id: string; name: string; project_dir: string }[])).catch(() => {});
+        }
+      }
+
       await api.cli.input(sessionId, inputText);
       setInputText('');
     }
@@ -528,6 +545,14 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
 function formatNum(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
   return String(n);
+}
+
+/** 从用户第一条消息生成简短标题 */
+function generateTitle(text: string): string {
+  const cleaned = text.replace(/\n+/g, ' ').trim();
+  if (cleaned.length <= 20) return cleaned;
+  // 取前 20 字符，在词边界截断
+  return cleaned.slice(0, 20).replace(/\s+\S*$/, '');
 }
 
 /** 侧边栏会话项（支持重命名、删除、继续会话） */

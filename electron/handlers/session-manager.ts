@@ -90,6 +90,17 @@ export function renameSession(sessionId: string, name: string): void {
   ).run(name, sessionId);
 }
 
+export function autoTitleSession(sessionId: string, title: string): void {
+  const db = getDb();
+  const row = db.prepare('SELECT name FROM sessions WHERE id = ?').get(sessionId) as { name: string } | undefined;
+  // 只有默认名称的会话才自动生成标题
+  if (row && (row.name === '新会话' || !row.name)) {
+    db.prepare(
+      "UPDATE sessions SET name = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(title, sessionId);
+  }
+}
+
 export function updateSessionStatus(sessionId: string, status: string): void {
   const db = getDb();
   db.prepare(
@@ -113,4 +124,5 @@ export function registerSessionHandlers(ipcMain: Electron.IpcMain): void {
     saveMessage(sessionId, role, content, timestamp, thinking, toolSteps, cost, duration, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
   );
   ipcMain.handle('session:messages:load', (_, sessionId: string) => loadMessages(sessionId));
+  ipcMain.handle('session:autoTitle', (_, { sessionId, title }: { sessionId: string; title: string }) => autoTitleSession(sessionId, title));
 }

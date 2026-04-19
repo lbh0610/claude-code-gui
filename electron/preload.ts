@@ -57,6 +57,7 @@ const electronAPI = {
       ipcRenderer.invoke('session:create', data),
     delete: (sessionId: string) => ipcRenderer.invoke('session:delete', sessionId),
     rename: (sessionId: string, name: string) => ipcRenderer.invoke('session:rename', { sessionId, name }),
+    autoTitle: (data: { sessionId: string; title: string }) => ipcRenderer.invoke('session:autoTitle', data),
     messages: {
       save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[] }) =>
         ipcRenderer.invoke('session:messages:save', data),
@@ -70,6 +71,8 @@ const electronAPI = {
       ipcRenderer.invoke('log:list', filter),
     export: (filePath: string, format: string) => ipcRenderer.invoke('log:export', { filePath, format }),
     diagnostic: (filePath: string) => ipcRenderer.invoke('log:diagnostic', { filePath }),
+    delete: (id: number) => ipcRenderer.invoke('log:delete', id),
+    clear: () => ipcRenderer.invoke('log:clear'),
   },
 
   // 插件管理

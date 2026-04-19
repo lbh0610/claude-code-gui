@@ -26,6 +26,7 @@ export interface ElectronAPI {
     create: (data: { projectId?: string; projectDir: string; name: string }) => Promise<unknown>;
     delete: (sessionId: string) => Promise<void>;
     rename: (sessionId: string, name: string) => Promise<void>;
+    autoTitle: (data: { sessionId: string; title: string }) => Promise<void>;
     messages: {
       save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[]; cost?: number; duration?: number; inputTokens?: number; outputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number }) => Promise<void>;
       load: (sessionId: string) => Promise<unknown[]>;
@@ -95,6 +96,7 @@ function getApi(): ElectronAPI {
       create: () => Promise.resolve({ id: 'mock-session', name: '新会话' }),
       delete: () => Promise.resolve(),
       rename: () => Promise.resolve(),
+      autoTitle: () => Promise.resolve(),
       messages: {
         save: () => Promise.resolve(),
         load: () => Promise.resolve([]),
