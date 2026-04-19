@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { path: '/', icon: '⌂', label: '首页' },
   { path: '/workspace', icon: '◫', label: '项目工作区' },
   { path: '/sessions', icon: '◷', label: '会话历史' },
+  { path: '/knowledge', icon: '📚', label: '知识库' },
   { path: '/logs', icon: '☰', label: '日志诊断' },
   { path: '/settings', icon: '⚙', label: '设置中心' },
   { path: '/skills', icon: '★', label: 'Skills 管理' },

@@ -11,6 +11,9 @@ import { registerPluginHandlers } from './handlers/plugin-manager';
 import { registerSkillHandlers } from './handlers/skill-manager';
 import { registerDiagnosticHandlers } from './handlers/diagnostics-manager';
 import { registerUpdateHandlers } from './handlers/updater';
+import { registerKnowledgeHandlers } from './handlers/knowledge-manager';
+import { registerTemplateHandlers } from './handlers/template-manager';
+import { registerToolHandlers } from './handlers/tool-manager';
 import { APP_VERSION, APP_NAME } from './config';
 import { addLog } from './handlers/log-manager';
 import { saveConfig } from './handlers/config-manager';
@@ -126,6 +129,9 @@ function registerHandlers(): void {
   registerSkillHandlers(ipcMain);
   registerDiagnosticHandlers(ipcMain);
   registerUpdateHandlers(ipcMain);
+  registerKnowledgeHandlers(ipcMain);
+  registerTemplateHandlers(ipcMain);
+  registerToolHandlers(ipcMain);
 
   // 文件系统操作：选择目录
   const { dialog } = require('electron');
@@ -140,6 +146,32 @@ function registerHandlers(): void {
   ipcMain.handle('fs:readFile', async (_, filePath: string) => {
     const fs = await import('node:fs');
     return fs.readFileSync(filePath, 'utf-8');
+  });
+
+  // 文件系统操作：读取目录
+  ipcMain.handle('fs:readdir', async (_, dirPath: string) => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    return entries.map((e) => ({
+      name: e.name,
+      isDirectory: e.isDirectory(),
+      isFile: e.isFile(),
+      path: path.join(dirPath, e.name),
+      size: e.isFile() ? fs.statSync(path.join(dirPath, e.name)).size : 0,
+    }));
+  });
+
+  // 文件系统操作：获取文件/目录信息
+  ipcMain.handle('fs:stat', async (_, filePath: string) => {
+    const fs = await import('node:fs');
+    const stat = fs.statSync(filePath);
+    return {
+      isFile: stat.isFile(),
+      isDirectory: stat.isDirectory(),
+      size: stat.size,
+      mtime: stat.mtime.toISOString(),
+    };
   });
 
   // 获取应用版本号

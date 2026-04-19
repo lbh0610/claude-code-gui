@@ -73,6 +73,9 @@ const electronAPI = {
     autoTitle: (data: { sessionId: string; title: string }) => ipcRenderer.invoke('session:autoTitle', data),
     updateTags: (data: { sessionId: string; tags: string[] }) => ipcRenderer.invoke('session:updateTags', data),
     togglePin: (data: { sessionId: string; pinned: boolean }) => ipcRenderer.invoke('session:togglePin', data),
+    fork: (data: { sessionId: string; newName?: string }) => ipcRenderer.invoke('session:fork', data),
+    setBudget: (data: { sessionId: string; budgetLimit: number | null }) => ipcRenderer.invoke('session:setBudget', data),
+    getBudget: (sessionId: string) => ipcRenderer.invoke('session:getBudget', sessionId),
     stats: (sessionId: string) => ipcRenderer.invoke('session:stats', sessionId),
     exportSession: (sessionId: string) => ipcRenderer.invoke('session:export', sessionId),
     messages: {
@@ -116,12 +119,6 @@ const electronAPI = {
     toggle: (id: string, enabled: boolean) => ipcRenderer.invoke('skill:toggle', { id, enabled }),
   },
 
-  // 文件系统 API：选择目录和读取文件内容
-  fs: {
-    selectDirectory: () => ipcRenderer.invoke('fs:selectDirectory'),
-    readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
-  },
-
   // 应用信息 API：获取应用版本号和运行平台
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
@@ -131,6 +128,42 @@ const electronAPI = {
   // 系统诊断 API：获取系统诊断信息
   diagnostic: {
     get: () => ipcRenderer.invoke('diagnostic:get'),
+  },
+
+  // 知识库 API
+  knowledge: {
+    add: (data: { title: string; content: string; category?: string; tags?: string[] }) => ipcRenderer.invoke('knowledge:add', data),
+    list: (category?: string) => ipcRenderer.invoke('knowledge:list', category),
+    get: (id: number) => ipcRenderer.invoke('knowledge:get', id),
+    delete: (id: number) => ipcRenderer.invoke('knowledge:delete', id),
+    update: (data: { id: number; title: string; content: string; category?: string; tags?: string[] }) => ipcRenderer.invoke('knowledge:update', data),
+    search: (data: { query: string; category?: string; limit?: number }) => ipcRenderer.invoke('knowledge:search', data),
+    import: (data: { filePath: string; category?: string }) => ipcRenderer.invoke('knowledge:import', data),
+  },
+
+  // Prompt 模板 API
+  template: {
+    list: (category?: string) => ipcRenderer.invoke('template:list', category),
+    get: (id: string) => ipcRenderer.invoke('template:get', id),
+    create: (data: { name: string; description?: string; category?: string; prompt: string; icon?: string }) => ipcRenderer.invoke('template:create', data),
+    delete: (id: string) => ipcRenderer.invoke('template:delete', id),
+    apply: (data: { id: string; variables: Record<string, string> }) => ipcRenderer.invoke('template:apply', data),
+  },
+
+  // 工具统计 API
+  tool: {
+    list: () => ipcRenderer.invoke('tool:list'),
+    session: (sessionId: string) => ipcRenderer.invoke('tool:session', sessionId),
+    record: (data: { sessionId: string; toolName: string; success: boolean }) => ipcRenderer.invoke('tool:record', data),
+    reset: () => ipcRenderer.invoke('tool:reset'),
+  },
+
+  // 文件浏览 API
+  fs: {
+    selectDirectory: () => ipcRenderer.invoke('fs:selectDirectory'),
+    readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
+    readdir: (dirPath: string) => ipcRenderer.invoke('fs:readdir', dirPath),
+    stat: (filePath: string) => ipcRenderer.invoke('fs:stat', filePath),
   },
 };
 

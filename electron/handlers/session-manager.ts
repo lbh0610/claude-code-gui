@@ -334,6 +334,74 @@ export function togglePin(sessionId: string, pinned: boolean): void {
 }
 
 /**
+ * 分支会话：复制消息历史到新会话
+ * @param sessionId - 源会话 ID
+ * @param newName - 新会话名称
+ * @returns 新会话数据
+ */
+export function forkSession(sessionId: string, newName: string): SessionRow {
+  const db = getDb();
+  const source = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId) as SessionRow | undefined;
+  if (!source) throw new Error('源会话不存在');
+
+  // 创建新会话
+  const id = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const name = newName || `${source.name} (分支)`;
+  db.prepare(
+    'INSERT INTO sessions (id, project_dir, name, status, tags, parent_id) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(id, source.project_dir, name, 'idle', source.tags, sessionId);
+
+  // 复制消息历史
+  const messages = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC').all(sessionId) as MessageRow[];
+  const insertMsg = db.prepare(
+    'INSERT INTO messages (session_id, role, content, thinking, tool_steps, cost, duration, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+  for (const msg of messages) {
+    insertMsg.run(id, msg.role, msg.content, msg.thinking, msg.tool_steps, msg.cost, msg.duration, msg.input_tokens, msg.output_tokens, msg.cache_creation_tokens, msg.cache_read_tokens, msg.timestamp);
+  }
+
+  addLog('session', 'info', 'session_forked', `会话 ${id} 从 ${sessionId} 分支`, id);
+  return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow;
+}
+
+/**
+ * 设置会话费用预算
+ * @param sessionId - 会话 ID
+ * @param budgetLimit - 预算上限（美元）
+ */
+export function setSessionBudget(sessionId: string, budgetLimit: number | null): void {
+  const db = getDb();
+  db.prepare(
+    "UPDATE sessions SET budget_limit = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(budgetLimit, sessionId);
+}
+
+/**
+ * 获取会话当前费用和预算
+ * @param sessionId - 会话 ID
+ * @returns 预算信息
+ */
+export function getSessionBudget(sessionId: string): { budgetLimit: number | null; currentCost: number } {
+  const db = getDb();
+  const session = db.prepare('SELECT budget_limit FROM sessions WHERE id = ?').get(sessionId) as { budget_limit: number | null } | undefined;
+  const stats = db.prepare('SELECT COALESCE(SUM(cost), 0) as totalCost FROM messages WHERE session_id = ?').get(sessionId) as { totalCost: number };
+  return {
+    budgetLimit: session?.budget_limit ?? null,
+    currentCost: Math.round(stats.totalCost * 10000) / 10000,
+  };
+}
+
+/**
+ * 检查会话是否超出预算
+ * @param sessionId - 会话 ID
+ * @returns 是否超限
+ */
+export function isBudgetExceeded(sessionId: string): boolean {
+  const { budgetLimit, currentCost } = getSessionBudget(sessionId);
+  return budgetLimit !== null && currentCost >= budgetLimit;
+}
+
+/**
  * 注册所有会话相关的 IPC 处理函数
  * @param ipcMain - Electron 主进程 IPC 实例
  */
@@ -371,4 +439,16 @@ export function registerSessionHandlers(ipcMain: Electron.IpcMain): void {
   ipcMain.handle('session:export', (_, sessionId: string) => exportSessionAsMarkdown(sessionId));
   // 置顶/取消置顶
   ipcMain.handle('session:togglePin', (_, { sessionId, pinned }: { sessionId: string; pinned: boolean }) => togglePin(sessionId, pinned));
+  // 分支会话
+  ipcMain.handle('session:fork', (_, { sessionId, newName }: { sessionId: string; newName?: string }) => {
+    try {
+      return { ok: true, session: forkSession(sessionId, newName || '') };
+    } catch (e: unknown) {
+      return { ok: false, error: e instanceof Error ? e.message : '分支失败' };
+    }
+  });
+  // 设置预算
+  ipcMain.handle('session:setBudget', (_, { sessionId, budgetLimit }: { sessionId: string; budgetLimit: number | null }) => setSessionBudget(sessionId, budgetLimit));
+  // 获取预算
+  ipcMain.handle('session:getBudget', (_, sessionId: string) => getSessionBudget(sessionId));
 }

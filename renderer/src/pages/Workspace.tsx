@@ -8,6 +8,10 @@ import { api } from '../lib/api';
 import ChatBubble, { ChatMessage } from '../components/ChatBubble';
 // 引入错误边界组件，防止子组件崩溃影响整个页面
 import ErrorBoundary from '../components/ErrorBoundary';
+import FileExplorer from '../components/FileExplorer';
+import EmbeddedTerminal from '../components/EmbeddedTerminal';
+import TemplatePicker from '../components/TemplatePicker';
+import ToolsPanel from '../components/ToolsPanel';
 
 // 导出主组件 Workspace：工作区/聊天页面
 // theme: 当前主题（dark/light）
@@ -62,6 +66,15 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   const [leftPanelWidth, setLeftPanelWidth] = useState(200);
   // 消息加载状态
   const [loadingMessages, setLoadingMessages] = useState(false);
+  // 终端高度
+  const [terminalHeight, setTerminalHeight] = useState(160);
+  // 终端显隐
+  const [showTerminal, setShowTerminal] = useState(false);
+  // 右侧面板标签 (context/tools/files)
+  const [rightPanelTab, setRightPanelTab] = useState<'context' | 'tools' | 'files'>('context');
+  // 费用预算
+  const [budgetLimit, setBudgetLimit] = useState<number | null>(null);
+  const [currentCost, setCurrentCost] = useState(0);
 
   // 组件挂载时：加载配置和会话列表，自动恢复最近一次会话
   useEffect(() => {
@@ -156,6 +169,8 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
         // 保存最近会话 ID 到配置中
         // 保存最近会话（后端会合并到已有配置）
         api.config.save({ lastSessionId: sid }).catch(() => {});
+        // 加载费用预算
+        api.session.getBudget(sid).then(b => { setBudgetLimit(b.budgetLimit); setCurrentCost(b.currentCost); }).catch(() => {});
         // 启动 CLI 进程
         const startResult = await api.cli.start(sid, dir, config);
         // 启动成功则标记为运行中
@@ -635,6 +650,8 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
             </div>
           </ErrorBoundary>
 
+          <TemplatePicker onInsert={(text) => setInputText(prev => prev ? prev + '\n' + text : text)} />
+
           <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {QUICK_COMMANDS.map((cmd, i) => (
               <button key={i} onClick={() => setInputText(prev => prev ? prev + '\n' + cmd.text : cmd.text)}
@@ -667,66 +684,105 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
         </div>
 
         {showRightPanel && (
-        <div style={{ width: 220, borderLeft: '1px solid var(--border-color)', padding: 12, overflow: 'auto', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-              {showTaskPanel ? '任务执行' : '上下文信息'}
-            </span>
-            <button className="btn btn-sm" onClick={() => setShowTaskPanel(!showTaskPanel)} style={{ fontSize: 10, padding: '2px 8px', color: 'var(--cyan)' }}>
-              {showTaskPanel ? '上下文' : '任务流'}
-            </button>
+        <div style={{ width: 240, borderLeft: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0 }}>
+          {/* 右侧面板标签 */}
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
+            {(['context', 'tools', 'files'] as const).map(tab => (
+              <button key={tab} onClick={() => setRightPanelTab(tab)}
+                style={{
+                  flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                  background: rightPanelTab === tab ? 'rgba(0,229,255,0.08)' : 'transparent',
+                  color: rightPanelTab === tab ? 'var(--cyan)' : 'var(--text-dim)',
+                  border: 'none', borderBottom: rightPanelTab === tab ? '2px solid var(--cyan)' : '2px solid transparent',
+                }}>
+                {tab === 'context' ? '上下文' : tab === 'tools' ? '工具' : '文件'}
+              </button>
+            ))}
           </div>
 
-          {showTaskPanel ? (
-            <div style={{ overflow: 'auto', flex: 1 }}>
-              {taskEvents.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: 8 }}>暂无任务事件</div>
-              ) : (
-                taskEvents.map((evt, i) => <TaskEventItem key={i} event={evt} index={i} />)
+          {rightPanelTab === 'tools' ? (
+            <div style={{ flex: 1, overflow: 'hidden' }}><ToolsPanel /></div>
+          ) : rightPanelTab === 'files' ? (
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              {projectDir ? <FileExplorer dirPath={projectDir} /> : (
+                <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>请先选择项目目录</div>
               )}
             </div>
           ) : (
-            <>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>当前模型</div>
-                <div style={{ fontSize: 13 }}>{String(config.model || 'claude-sonnet-4-6')}</div>
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>项目目录</div>
-                <div style={{ fontSize: 11, wordBreak: 'break-all', color: 'var(--text-secondary)' }}>{projectDir || '未选择'}</div>
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>运行状态</div>
-                <div className="flex items-center gap-2">
-                  <span className={`status-dot ${isRunning ? 'running' : 'idle'}`} />
-                  <span style={{ fontSize: 13 }}>{isRunning ? '运行中' : '空闲'}</span>
+            <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+              {/* 任务执行 */}
+              {showTaskPanel ? (
+                <div>
+                  {taskEvents.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: 8 }}>暂无任务事件</div>
+                  ) : (
+                    taskEvents.map((evt, i) => <TaskEventItem key={i} event={evt} index={i} />)
+                  )}
                 </div>
-              </div>
+              ) : (
+                <>
+                  {/* 费用预算 */}
+                  {sessionId && (
+                    <div style={{ marginBottom: 16, padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>费用预算</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.8 }}>
+                        <div>已用: <span style={{ color: currentCost >= (budgetLimit ?? Infinity) ? 'var(--danger)' : 'var(--cyan)', fontWeight: 600 }}>${currentCost.toFixed(4)}</span></div>
+                        {budgetLimit !== null && <div>限额: <span style={{ color: 'var(--text-primary)' }}>${budgetLimit.toFixed(2)}</span></div>}
+                      </div>
+                      <input className="input" type="number" step="0.1" min="0" placeholder="设置预算上限 ($)"
+                        value={budgetLimit ?? ''}
+                        onChange={(e) => { const v = e.target.value ? parseFloat(e.target.value) : null; setBudgetLimit(v); }}
+                        onBlur={() => { if (sessionId) api.session.setBudget({ sessionId, budgetLimit }).catch(() => {}); }}
+                        style={{ fontSize: 11, padding: '2px 6px', marginTop: 6 }} />
+                    </div>
+                  )}
 
-              {(tokenSummary.inputTokens + tokenSummary.outputTokens + tokenSummary.cost) > 0 && (
-                <div style={{ marginBottom: 16, padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>费用汇总</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.8 }}>
-                    <div>输入: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.inputTokens)}</span></div>
-                    <div>输出: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.outputTokens)}</span></div>
-                    {tokenSummary.cacheTokens > 0 && <div>缓存: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.cacheTokens)}</span></div>}
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 4, marginTop: 4 }}>
-                      总计: <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>${tokenSummary.cost.toFixed(4)}</span>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>当前模型</div>
+                    <div style={{ fontSize: 13 }}>{String(config.model || 'claude-sonnet-4-6')}</div>
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>项目目录</div>
+                    <div style={{ fontSize: 11, wordBreak: 'break-all', color: 'var(--text-secondary)' }}>{projectDir || '未选择'}</div>
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>运行状态</div>
+                    <div className="flex items-center gap-2">
+                      <span className={`status-dot ${isRunning ? 'running' : 'idle'}`} />
+                      <span style={{ fontSize: 13 }}>{isRunning ? '运行中' : '空闲'}</span>
                     </div>
                   </div>
-                </div>
-              )}
 
-              <button className="btn btn-secondary btn-sm w-full" onClick={async () => { if (sessionId) api.log.export(`/tmp/session-${sessionId}.log`, 'text'); }}>导出日志</button>
-            </>
+                  {(tokenSummary.inputTokens + tokenSummary.outputTokens + tokenSummary.cost) > 0 && (
+                    <div style={{ marginBottom: 16, padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>费用汇总</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.8 }}>
+                        <div>输入: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.inputTokens)}</span></div>
+                        <div>输出: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.outputTokens)}</span></div>
+                        {tokenSummary.cacheTokens > 0 && <div>缓存: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.cacheTokens)}</span></div>}
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 4, marginTop: 4 }}>
+                          总计: <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>${tokenSummary.cost.toFixed(4)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <button className="btn btn-secondary btn-sm w-full" onClick={async () => { if (sessionId) api.log.export(`/tmp/session-${sessionId}.log`, 'text'); }}>导出日志</button>
+                </>
+              )}
+            </div>
           )}
         </div>
         )}
       </div>
 
+      {/* 内嵌终端 */}
+      <EmbeddedTerminal sessionId={sessionId} visible={showTerminal} height={terminalHeight} onHeightChange={setTerminalHeight} />
+
+      {/* 底部状态栏 */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 16, padding: '4px 16px',
-        borderTop: '1px solid var(--border-color)', background: 'var(--bg-card)',
+        borderTop: showTerminal ? 'none' : '1px solid var(--border-color)', background: 'var(--bg-card)',
         fontSize: 11, color: 'var(--text-dim)', flexShrink: 0,
       }}>
         <span className={`status-dot ${isRunning ? 'running' : 'idle'}`} />
@@ -739,6 +795,10 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
           </span>
         )}
         {tokenSummary.cost > 0 && <span>| ${tokenSummary.cost.toFixed(4)}</span>}
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-sm" onClick={() => setShowTerminal(!showTerminal)} style={{ fontSize: 10, padding: '2px 6px', color: showTerminal ? 'var(--cyan)' : 'var(--text-dim)' }}>
+          {showTerminal ? '隐藏终端' : '显示终端'}
+        </button>
       </div>
 
       {showShortcuts && (

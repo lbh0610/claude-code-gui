@@ -284,6 +284,13 @@ export default function Sessions() {
                     <span className={`status-dot ${s.status === 'idle' ? 'idle' : 'running'}`} />
                     {/* 操作按钮组 */}
                     <button className="btn btn-secondary btn-sm" onClick={() => handleOpenSession(s)} style={{ fontSize: 10 }} title="打开会话">打开</button>
+                    <button className="btn btn-sm" onClick={async () => {
+                      const result = await api.session.fork({ sessionId: s.id });
+                      if (result.ok) {
+                        toast.success('会话已分支');
+                        loadSessions();
+                      }
+                    }} style={{ fontSize: 10, color: 'var(--purple)' }} title="分支此会话">分支</button>
                     <button className="btn btn-sm" onClick={() => handleTogglePin(s.id, !s.pinned)} style={{ fontSize: 10, color: 'var(--text-dim)' }} title={s.pinned ? '取消置顶' : '置顶'}>
                       {s.pinned ? '📌' : '📍'}
                     </button>

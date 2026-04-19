@@ -1,4 +1,28 @@
-/* ===================== 全局样式 — 暗色主题 ===================== */
+/* ===================== 基础样式 — 亮色主题（默认） ===================== */
+
+:root {
+  --bg-primary: #F5F7FA;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F0F4F8;
+  --border-color: #E2E8F0;
+  --cyan: #0099AA;
+  --cyan-dim: #007788;
+  --blue: #4488FF;
+  --purple: #7C4DFF;
+  --pink: #FF4081;
+  --success: #00E676;
+  --warn: #FFAB00;
+  --danger: #EF4444;
+  --text-primary: #1A202C;
+  --text-secondary: #4A5568;
+  --text-dim: #A0AEC0;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Consolas', 'Monaco', monospace;
+  --font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --radius: 8px;
+  --transition: all 0.2s ease;
+}
+
+/* ===================== 暗色主题 ===================== */
 
 [data-theme="dark"] {
   --bg-primary: #0A1628;
@@ -7,19 +31,9 @@
   --border-color: #223A60;
   --cyan: #00E5FF;
   --cyan-dim: #0099AA;
-  --blue: #4488FF;
-  --purple: #7C4DFF;
-  --pink: #FF4081;
-  --success: #00E676;
-  --warn: #FFAB00;
-  --danger: #EF4444;
   --text-primary: #EEEEEE;
   --text-secondary: #9EA7C0;
   --text-dim: #5A6A8A;
-  --font-mono: 'SF Mono', 'Cascadia Code', 'Consolas', 'Monaco', monospace;
-  --font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --radius: 8px;
-  --transition: all 0.2s ease;
 }
 
 * {
@@ -307,19 +321,7 @@ body {
   color: var(--cyan);
 }
 
-/* ===================== 亮色主题 ===================== */
-
-[data-theme="light"], :root {
-  --bg-primary: #F5F7FA;
-  --bg-card: #FFFFFF;
-  --bg-card-hover: #F0F4F8;
-  --border-color: #E2E8F0;
-  --cyan: #0099AA;
-  --cyan-dim: #007788;
-  --text-primary: #1A202C;
-  --text-secondary: #4A5568;
-  --text-dim: #A0AEC0;
-}
+/* 亮色主题组件覆盖（代码块/高亮文字） */
 
 [data-theme="light"] .chat-content code {
   background: rgba(0, 0, 0, 0.06);

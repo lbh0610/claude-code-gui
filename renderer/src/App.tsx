@@ -18,6 +18,7 @@ import Logs from './pages/Logs';
 import Plugins from './pages/Plugins';
 import Updates from './pages/Updates';
 import Skills from './pages/Skills';
+import KnowledgeBase from './pages/KnowledgeBase';
 import OnboardingWizard from './components/OnboardingWizard';
 import { api } from './lib/api';
 
@@ -37,19 +38,24 @@ export default function App() {
 
   // 组件挂载时：同步 localStorage 和配置中的主题
   useEffect(() => {
-    localStorage.setItem('theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
-    // 从后端配置中读取主题设置
-    api.config.get().then(cfg => {
-      if (cfg.theme && typeof cfg.theme === 'string') {
-        setTheme(cfg.theme);
-      }
-    }).catch(() => {});
+    const stored = localStorage.getItem('theme');
+    if (stored) {
+      // 有本地记录则直接用
+      document.documentElement.setAttribute('data-theme', stored);
+    } else {
+      // 首次加载则从后端读取
+      api.config.get().then(cfg => {
+        if (cfg.theme && typeof cfg.theme === 'string') {
+          setTheme(cfg.theme);
+        }
+      }).catch(() => {});
+    }
   }, []);
 
   // 主题变化时更新 DOM 属性
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
   }, [theme]);
 
   return (
@@ -73,6 +79,7 @@ export default function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/workspace" element={<Workspace theme={theme} onThemeChange={setTheme} />} />
                 <Route path="/sessions" element={<Sessions />} />
+                <Route path="/knowledge" element={<KnowledgeBase />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/plugins" element={<Plugins />} />

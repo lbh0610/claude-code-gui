@@ -38,6 +38,9 @@ export interface ElectronAPI {
     autoTitle: (data: { sessionId: string; title: string }) => Promise<void>;
     updateTags: (data: { sessionId: string; tags: string[] }) => Promise<void>;
     togglePin: (data: { sessionId: string; pinned: boolean }) => Promise<void>;
+    fork: (data: { sessionId: string; newName?: string }) => Promise<{ ok: boolean; session?: unknown; error?: string }>;
+    setBudget: (data: { sessionId: string; budgetLimit: number | null }) => Promise<void>;
+    getBudget: (sessionId: string) => Promise<{ budgetLimit: number | null; currentCost: number }>;
     stats: (sessionId: string) => Promise<{ messageCount: number; totalCost: number; totalInputTokens: number; totalOutputTokens: number; lastMessage: { role: string; content: string; timestamp: number } | null }>;
     exportSession: (sessionId: string) => Promise<{ content: string; name: string }>;
     messages: {
@@ -74,10 +77,12 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<{ ok: boolean; msg?: string }>;
     toggle: (id: string, enabled: boolean) => Promise<void>;
   };
-  // 文件系统：选择目录、读取文件
+  // 文件系统：选择目录、读取文件、目录浏览
   fs: {
     selectDirectory: () => Promise<string | null>;
     readFile: (filePath: string) => Promise<string>;
+    readdir: (dirPath: string) => Promise<Array<{ name: string; isDirectory: boolean; isFile: boolean; path: string; size: number }>>;
+    stat: (filePath: string) => Promise<{ isFile: boolean; isDirectory: boolean; size: number; mtime: string }>;
   };
   // 应用信息：版本、平台
   app: {
@@ -87,6 +92,31 @@ export interface ElectronAPI {
   // 系统诊断：获取诊断报告
   diagnostic: {
     get: () => Promise<unknown>;
+  };
+  // 知识库/RAG
+  knowledge: {
+    add: (data: { title: string; content: string; category?: string; tags?: string[] }) => Promise<{ ok: boolean; id?: number; msg?: string }>;
+    list: (category?: string) => Promise<unknown[]>;
+    get: (id: number) => Promise<unknown>;
+    delete: (id: number) => Promise<{ ok: boolean; msg?: string }>;
+    update: (data: { id: number; title: string; content: string; category?: string; tags?: string[] }) => Promise<{ ok: boolean; msg?: string }>;
+    search: (data: { query: string; category?: string; limit?: number }) => Promise<unknown[]>;
+    import: (data: { filePath: string; category?: string }) => Promise<{ ok: boolean; msg?: string }>;
+  };
+  // Prompt 模板
+  template: {
+    list: (category?: string) => Promise<unknown[]>;
+    get: (id: string) => Promise<unknown>;
+    create: (data: { name: string; description?: string; category?: string; prompt: string; icon?: string }) => Promise<{ ok: boolean; id?: string; msg?: string }>;
+    delete: (id: string) => Promise<{ ok: boolean; msg?: string }>;
+    apply: (data: { id: string; variables: Record<string, string> }) => Promise<{ ok: boolean; result?: string; msg?: string }>;
+  };
+  // 工具统计
+  tool: {
+    list: () => Promise<unknown[]>;
+    session: (sessionId: string) => Promise<unknown[]>;
+    record: (data: { sessionId: string; toolName: string; success: boolean }) => Promise<void>;
+    reset: () => Promise<void>;
   };
 }
 
@@ -132,6 +162,9 @@ function getApi(): ElectronAPI {
       autoTitle: () => Promise.resolve(),
       updateTags: () => Promise.resolve(),
       togglePin: () => Promise.resolve(),
+      fork: () => Promise.resolve({ ok: true, session: { id: 'mock-forked', name: '新会话 (分支)' } }),
+      setBudget: () => Promise.resolve(),
+      getBudget: () => Promise.resolve({ budgetLimit: null, currentCost: 0 }),
       stats: () => Promise.resolve({ messageCount: 0, totalCost: 0, totalInputTokens: 0, totalOutputTokens: 0, lastMessage: null }),
       exportSession: () => Promise.resolve({ content: '', name: 'mock.md' }),
       messages: {
@@ -167,6 +200,8 @@ function getApi(): ElectronAPI {
     fs: {
       selectDirectory: () => Promise.resolve(null),
       readFile: () => Promise.resolve(''),
+      readdir: () => Promise.resolve([]),
+      stat: () => Promise.resolve({ isFile: true, isDirectory: false, size: 0, mtime: '' }),
     },
     app: {
       getVersion: () => Promise.resolve('0.1.0'),
@@ -174,6 +209,28 @@ function getApi(): ElectronAPI {
     },
     diagnostic: {
       get: () => Promise.resolve({ system: {}, config: {}, db: {}, disk: {}, cli: {} }),
+    },
+    knowledge: {
+      add: () => Promise.resolve({ ok: true, id: 1 }),
+      list: () => Promise.resolve([]),
+      get: () => Promise.resolve(null),
+      delete: () => Promise.resolve({ ok: true }),
+      update: () => Promise.resolve({ ok: true }),
+      search: () => Promise.resolve([]),
+      import: () => Promise.resolve({ ok: false, msg: 'mock' }),
+    },
+    template: {
+      list: () => Promise.resolve([]),
+      get: () => Promise.resolve(null),
+      create: () => Promise.resolve({ ok: false, msg: 'mock' }),
+      delete: () => Promise.resolve({ ok: false, msg: 'mock' }),
+      apply: () => Promise.resolve({ ok: true, result: '' }),
+    },
+    tool: {
+      list: () => Promise.resolve([]),
+      session: () => Promise.resolve([]),
+      record: () => Promise.resolve(),
+      reset: () => Promise.resolve(),
     },
   };
 }
