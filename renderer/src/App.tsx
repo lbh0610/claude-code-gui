@@ -58,7 +58,7 @@ export default function App() {
             overflow: 'hidden',
           }}
         >
-          <TopBar />
+          <TopBar theme={theme} onThemeChange={setTheme} />
           <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
             <Sidebar />
             <main style={{ flex: 1, overflow: 'hidden' }}>

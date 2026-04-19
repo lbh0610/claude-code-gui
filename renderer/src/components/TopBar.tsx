@@ -3,10 +3,24 @@ import { useState, useEffect } from 'react';
 // 引入 API 实例
 import { api } from '../lib/api';
 
-// 顶部栏组件：Logo、搜索框、版本信息
-export default function TopBar() {
+// 顶部栏组件属性接口
+interface TopBarProps {
+  theme: string;
+  onThemeChange: (t: string) => void;
+}
+
+// 顶部栏组件：Logo、搜索框、主题切换、版本信息
+export default function TopBar({ theme, onThemeChange }: TopBarProps) {
   // 搜索框输入状态
   const [search, setSearch] = useState('');
+
+  // 切换主题
+  const handleToggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    onThemeChange(next);
+    // 同步到后端配置
+    api.config.save({ theme: next }).catch(() => {});
+  };
 
   return (
     <header style={{
@@ -42,13 +56,21 @@ export default function TopBar() {
         />
       </div>
 
-      {/* 右侧图标 */}
+      {/* 右侧：主题切换 + 版本 */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: 12,
         marginLeft: 'auto',
       }}>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={handleToggleTheme}
+          title="切换全局主题"
+          style={{ fontSize: 11, padding: '4px 10px', minWidth: 50 }}
+        >
+          {theme === 'dark' ? '☀ 亮色' : '🌙 暗色'}
+        </button>
         <VersionBadge />
       </div>
     </header>

@@ -471,14 +471,6 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
           <option value="claude-opus-4-6-20250514">Opus 4.6</option>
           <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
         </select>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => { const next = theme === 'dark' ? 'light' : 'dark'; onThemeChange?.(next); }}
-          title="切换主题"
-          style={{ fontSize: 11, padding: '4px 8px', minWidth: 50 }}
-        >
-          {theme === 'dark' ? '☀ 亮色' : '🌙 暗色'}
-        </button>
         <button className="btn btn-secondary btn-sm" onClick={handleOpenProject}>📁 选择目录</button>
         <button className="btn btn-primary btn-sm" onClick={handleStartSession} disabled={isRunning}>▶ 新建会话</button>
         <button
