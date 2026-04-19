@@ -244,6 +244,16 @@ npm run package:mac
 
 ---
 
+### IMG 运行图片
+
+![1f7e1fd325defff4d639c49f6df539d9](/Users/longbaihua/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_nxagh6ll255a22_da80/temp/RWTemp/2026-04/9e20f478899dc29eb19741386f9343c8/1f7e1fd325defff4d639c49f6df539d9.png)
+
+![7df8f2c95a395b997030a31c2de91b58](/Users/longbaihua/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_nxagh6ll255a22_da80/temp/RWTemp/2026-04/9e20f478899dc29eb19741386f9343c8/7df8f2c95a395b997030a31c2de91b58.png)
+
+![dacdc81a994a48ae6c1527b6949f95b7](/Users/longbaihua/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_nxagh6ll255a22_da80/temp/RWTemp/2026-04/9e20f478899dc29eb19741386f9343c8/dacdc81a994a48ae6c1527b6949f95b7.png)
+
+![8f25dbf8c5fa95e9a4ffc0b8a0618ed1](/Users/longbaihua/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_nxagh6ll255a22_da80/temp/RWTemp/2026-04/9e20f478899dc29eb19741386f9343c8/8f25dbf8c5fa95e9a4ffc0b8a0618ed1.png)
+
 ## License
 
 MIT
