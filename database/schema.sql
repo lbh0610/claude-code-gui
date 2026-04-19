@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
     cli_pid INTEGER,
-    summary TEXT
+    summary TEXT,
+    pinned INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS configs (

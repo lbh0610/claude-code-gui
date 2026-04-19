@@ -72,6 +72,9 @@ const electronAPI = {
     rename: (sessionId: string, name: string) => ipcRenderer.invoke('session:rename', { sessionId, name }),
     autoTitle: (data: { sessionId: string; title: string }) => ipcRenderer.invoke('session:autoTitle', data),
     updateTags: (data: { sessionId: string; tags: string[] }) => ipcRenderer.invoke('session:updateTags', data),
+    togglePin: (data: { sessionId: string; pinned: boolean }) => ipcRenderer.invoke('session:togglePin', data),
+    stats: (sessionId: string) => ipcRenderer.invoke('session:stats', sessionId),
+    exportSession: (sessionId: string) => ipcRenderer.invoke('session:export', sessionId),
     messages: {
       save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[] }) =>
         ipcRenderer.invoke('session:messages:save', data),

@@ -37,6 +37,9 @@ export interface ElectronAPI {
     rename: (sessionId: string, name: string) => Promise<void>;
     autoTitle: (data: { sessionId: string; title: string }) => Promise<void>;
     updateTags: (data: { sessionId: string; tags: string[] }) => Promise<void>;
+    togglePin: (data: { sessionId: string; pinned: boolean }) => Promise<void>;
+    stats: (sessionId: string) => Promise<{ messageCount: number; totalCost: number; totalInputTokens: number; totalOutputTokens: number; lastMessage: { role: string; content: string; timestamp: number } | null }>;
+    exportSession: (sessionId: string) => Promise<{ content: string; name: string }>;
     messages: {
       save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[]; cost?: number; duration?: number; inputTokens?: number; outputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number }) => Promise<void>;
       load: (sessionId: string) => Promise<unknown[]>;
@@ -128,6 +131,9 @@ function getApi(): ElectronAPI {
       rename: () => Promise.resolve(),
       autoTitle: () => Promise.resolve(),
       updateTags: () => Promise.resolve(),
+      togglePin: () => Promise.resolve(),
+      stats: () => Promise.resolve({ messageCount: 0, totalCost: 0, totalInputTokens: 0, totalOutputTokens: 0, lastMessage: null }),
+      exportSession: () => Promise.resolve({ content: '', name: 'mock.md' }),
       messages: {
         save: () => Promise.resolve(),
         load: () => Promise.resolve([]),

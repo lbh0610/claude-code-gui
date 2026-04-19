@@ -40,6 +40,7 @@ export function getDb(): Database.Database {
   try { db.prepare("CREATE TABLE IF NOT EXISTS user_skills (id TEXT PRIMARY KEY, enabled INTEGER DEFAULT 1, updated_at TEXT DEFAULT (datetime('now')))").run(); } catch {}
   try { db.prepare("ALTER TABLE sessions ADD COLUMN tags TEXT DEFAULT '[]'").run(); } catch {}
   try { db.prepare('ALTER TABLE logs ADD COLUMN content TEXT').run(); } catch {}
+  try { db.prepare("ALTER TABLE sessions ADD COLUMN pinned INTEGER DEFAULT 0").run(); } catch {}
 
   return db;
 }

@@ -28,6 +28,12 @@ interface MessageRow {
   content: string;      // 消息内容
   thinking: string | null;  // 思考过程
   tool_steps: string | null;  // 工具调用步骤的 JSON
+  cost: number | null;  // 费用
+  duration: number | null;  // 耗时
+  input_tokens: number | null;  // 输入 token
+  output_tokens: number | null;  // 输出 token
+  cache_creation_tokens: number | null;  // 缓存创建 token
+  cache_read_tokens: number | null;  // 缓存读取 token
   timestamp: number;    // 消息时间戳
 }
 
@@ -49,11 +55,11 @@ export function listSessions(projectId?: string, tag?: string): SessionRow[] {
   // 按标签过滤（LIKE 匹配 JSON 数组中的标签）
   if (tag) {
     return db.prepare(
-      "SELECT * FROM sessions WHERE tags LIKE ? ORDER BY updated_at DESC LIMIT 50"
+      "SELECT * FROM sessions WHERE tags LIKE ? ORDER BY pinned DESC, updated_at DESC LIMIT 50"
     ).all(`%"${tag}"%`) as SessionRow[];
   }
-  // 查询所有会话，按更新时间降序，最多 50 条
-  const stmt = db.prepare('SELECT * FROM sessions ORDER BY updated_at DESC LIMIT 50');
+  // 查询所有会话，置顶优先，按更新时间降序，最多 50 条
+  const stmt = db.prepare('SELECT * FROM sessions ORDER BY pinned DESC, updated_at DESC LIMIT 50');
   return stmt.all() as SessionRow[];
 }
 
@@ -205,6 +211,129 @@ export function deleteMessage(sessionId: string, messageId: number): void {
 }
 
 /**
+ * 获取会话的统计信息（消息数、总费用、Token 用量、最后一条消息预览）
+ * @param sessionId - 会话 ID
+ * @returns 统计对象
+ */
+export function getSessionStats(sessionId: string): {
+  messageCount: number;
+  totalCost: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  lastMessage: { role: string; content: string; timestamp: number } | null;
+} {
+  const db = getDb();
+  // 消息数 + 聚合费用/Token
+  const stats = db.prepare(
+    'SELECT COUNT(*) as cnt, COALESCE(SUM(cost), 0) as totalCost, ' +
+    'COALESCE(SUM(input_tokens), 0) as totalInput, COALESCE(SUM(output_tokens), 0) as totalOutput ' +
+    'FROM messages WHERE session_id = ?'
+  ).get(sessionId) as { cnt: number; totalCost: number; totalInput: number; totalOutput: number };
+
+  // 最后一条消息
+  const lastMsg = db.prepare(
+    'SELECT role, content, timestamp FROM messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1'
+  ).get(sessionId) as { role: string; content: string; timestamp: number } | undefined;
+
+  return {
+    messageCount: stats.cnt,
+    totalCost: Math.round(stats.totalCost * 1000) / 1000,
+    totalInputTokens: stats.totalInput,
+    totalOutputTokens: stats.totalOutput,
+    lastMessage: lastMsg ? { role: lastMsg.role, content: lastMsg.content.slice(0, 200), timestamp: lastMsg.timestamp } : null,
+  };
+}
+
+/**
+ * 导出会话为 Markdown 格式
+ * @param sessionId - 会话 ID
+ * @returns Markdown 字符串
+ */
+export function exportSessionAsMarkdown(sessionId: string): { content: string; name: string } {
+  const db = getDb();
+  // 获取会话信息
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId) as SessionRow | undefined;
+  if (!session) throw new Error('会话不存在');
+
+  // 获取所有消息
+  const messages = db.prepare(
+    'SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC'
+  ).all(sessionId) as MessageRow[];
+
+  const lines: string[] = [];
+  lines.push(`# ${session.name}`);
+  lines.push('');
+  lines.push(`- 项目: ${session.project_dir}`);
+  lines.push(`- 创建时间: ${session.created_at}`);
+  lines.push(`- 标签: ${session.tags}`);
+  lines.push(`- 状态: ${session.status}`);
+  if (session.summary) lines.push(`- 摘要: ${session.summary}`);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      lines.push(`## 用户 (${new Date(msg.timestamp).toLocaleString('zh-CN')})`);
+      lines.push('');
+      lines.push(msg.content);
+      lines.push('');
+    } else if (msg.role === 'assistant') {
+      lines.push(`## AI 助手 (${new Date(msg.timestamp).toLocaleString('zh-CN')})`);
+      lines.push('');
+      if (msg.thinking) {
+        lines.push('> 💭 思考过程：');
+        lines.push('> ' + msg.thinking);
+        lines.push('');
+      }
+      if (msg.tool_steps) {
+        try {
+          const tools = JSON.parse(msg.tool_steps) as Array<{ name: string; input?: Record<string, unknown>; output?: string; status?: string }>;
+          lines.push('> 工具调用：');
+          for (const t of tools) {
+            lines.push(`> - **${t.name}** (${t.status || 'done'})`);
+          }
+          lines.push('');
+        } catch { /* 解析失败则跳过 */ }
+      }
+      lines.push(msg.content);
+      lines.push('');
+      // 费用信息
+      if (msg.cost || msg.duration) {
+        const parts: string[] = [];
+        if (msg.cost) parts.push(`费用: $${msg.cost.toFixed(4)}`);
+        if (msg.duration) parts.push(`耗时: ${(msg.duration / 1000).toFixed(1)}s`);
+        if (msg.input_tokens) parts.push(`输入: ${msg.input_tokens} tokens`);
+        if (msg.output_tokens) parts.push(`输出: ${msg.output_tokens} tokens`);
+        if (parts.length > 0) {
+          lines.push(`_(${parts.join(' | ')})_`);
+          lines.push('');
+        }
+      }
+    } else {
+      lines.push(`## 系统 (${new Date(msg.timestamp).toLocaleString('zh-CN')})`);
+      lines.push('');
+      lines.push(msg.content);
+      lines.push('');
+    }
+  }
+
+  return { content: lines.join('\n'), name: `${session.name}.md` };
+}
+
+/**
+ * 置顶/取消置顶会话
+ * @param sessionId - 会话 ID
+ * @param pinned - 是否置顶
+ */
+export function togglePin(sessionId: string, pinned: boolean): void {
+  const db = getDb();
+  db.prepare(
+    "UPDATE sessions SET pinned = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(pinned ? 1 : 0, sessionId);
+}
+
+/**
  * 注册所有会话相关的 IPC 处理函数
  * @param ipcMain - Electron 主进程 IPC 实例
  */
@@ -236,4 +365,10 @@ export function registerSessionHandlers(ipcMain: Electron.IpcMain): void {
   ipcMain.handle('session:autoTitle', (_, { sessionId, title }: { sessionId: string; title: string }) => autoTitleSession(sessionId, title));
   // 更新标签
   ipcMain.handle('session:updateTags', (_, { sessionId, tags }: { sessionId: string; tags: string[] }) => updateSessionTags(sessionId, tags));
+  // 获取会话统计
+  ipcMain.handle('session:stats', (_, sessionId: string) => getSessionStats(sessionId));
+  // 导出会话为 Markdown
+  ipcMain.handle('session:export', (_, sessionId: string) => exportSessionAsMarkdown(sessionId));
+  // 置顶/取消置顶
+  ipcMain.handle('session:togglePin', (_, { sessionId, pinned }: { sessionId: string; pinned: boolean }) => togglePin(sessionId, pinned));
 }
