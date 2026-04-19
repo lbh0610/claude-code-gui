@@ -95,7 +95,7 @@ export async function startSession(
     let assistantTurnThinking = '';
     let toolSteps: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] = [];
 
-    /** 发送当前累积的流式更新 */
+    /** 发送当前累积的流式更新（仅聊天气泡） */
     function sendStreamingUpdate() {
       sendToRenderer('cli-stream', {
         sessionId,
@@ -113,6 +113,18 @@ export async function startSession(
         if (!line.trim()) continue;
         try {
           const msg = JSON.parse(line);
+
+          // ====== 任务事件：实时推送所有解析到的事件 ======
+          sendToRenderer('cli-task', {
+            sessionId,
+            type: msg.type || 'unknown',
+            subtype: msg.subtype || '',
+            timestamp: Date.now(),
+            summary: summarizeTaskEvent(msg),
+            raw: JSON.stringify(msg).slice(0, 2000),
+          });
+          // =================================================
+
           if (msg.type === 'assistant' && msg.message?.content) {
             for (const part of msg.message.content) {
               if (part.type === 'text') {
@@ -139,7 +151,7 @@ export async function startSession(
             }
           }
           if (msg.type === 'result') {
-            // 最终结果：发送完整消息（带唯一 msgId 去重）
+            const usage = msg.usage as Record<string, unknown> | undefined;
             messageCounter++;
             sendToRenderer('cli-output', {
               sessionId,
@@ -149,13 +161,19 @@ export async function startSession(
               toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
               role: 'assistant' as const,
               msgId: `${sessionId}_a_${messageCounter}`,
+              cost: msg.total_cost_usd ?? 0,
+              duration: msg.duration_ms ?? 0,
+              inputTokens: usage ? (usage.input_tokens as number | undefined) ?? 0 : 0,
+              outputTokens: usage ? (usage.output_tokens as number | undefined) ?? 0 : 0,
+              cacheCreationTokens: usage ? (usage.cache_creation_input_tokens as number | undefined) ?? 0 : 0,
+              cacheReadTokens: usage ? (usage.cache_read_input_tokens as number | undefined) ?? 0 : 0,
             });
             assistantTurnText = '';
             assistantTurnThinking = '';
             toolSteps = [];
           }
         } catch {
-          // 非 JSON 行，原样发送
+          // 非 JSON 行，同时推送到任务流和输出流
           messageCounter++;
           sendToRenderer('cli-output', { sessionId, type: 'stdout' as const, text: line + '\n', role: 'system' as const, msgId: `${sessionId}_s_${messageCounter}` });
         }
@@ -199,6 +217,31 @@ export async function startSession(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, pid: null, msg: `启动失败: ${msg}` };
+  }
+}
+
+/**
+ * 摘要：将 JSON 事件转为可读的任务描述
+ */
+function summarizeTaskEvent(msg: Record<string, unknown>): string {
+  switch (msg.type) {
+    case 'system':
+      if (msg.subtype === 'init') return `会话已初始化 (session_id: ${String(msg.session_id || '').slice(0, 8)})`;
+      return `系统事件: ${String(msg.subtype || '')}`;
+    case 'assistant': {
+      const content = msg.message as Record<string, unknown> | undefined;
+      if (content?.content && Array.isArray(content.content)) {
+        const types = content.content.map((c: Record<string, unknown>) => String(c.type || '')).join(', ');
+        return `AI 回复: [${types}]`;
+      }
+      return 'AI 消息';
+    }
+    case 'result':
+      return `执行完成 (耗时: ${String(msg.duration_ms || '')}ms, 费用: $${String(msg.total_cost_usd || '0')})`;
+    case 'user':
+      return '用户输入';
+    default:
+      return `${String(msg.type || 'unknown')} 事件`;
   }
 }
 

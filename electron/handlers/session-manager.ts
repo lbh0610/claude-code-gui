@@ -48,11 +48,23 @@ interface MessageRow {
   timestamp: number;
 }
 
-export function saveMessage(sessionId: string, role: string, content: string, timestamp: number, thinking?: string, toolSteps?: unknown[]): void {
+export function saveMessage(
+  sessionId: string, role: string, content: string, timestamp: number,
+  thinking?: string, toolSteps?: unknown[],
+  cost?: number, duration?: number,
+  inputTokens?: number, outputTokens?: number,
+  cacheCreationTokens?: number, cacheReadTokens?: number,
+): void {
   const db = getDb();
   db.prepare(
-    'INSERT INTO messages (session_id, role, content, thinking, tool_steps, timestamp) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(sessionId, role, content, thinking || null, toolSteps ? JSON.stringify(toolSteps) : null, timestamp);
+    'INSERT INTO messages (session_id, role, content, thinking, tool_steps, cost, duration, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    sessionId, role, content, thinking || null, toolSteps ? JSON.stringify(toolSteps) : null,
+    cost ?? null, duration ?? null,
+    inputTokens ?? null, outputTokens ?? null,
+    cacheCreationTokens ?? null, cacheReadTokens ?? null,
+    timestamp,
+  );
 }
 
 export function loadMessages(sessionId: string): MessageRow[] {
@@ -70,6 +82,13 @@ export function deleteSession(sessionId: string): void {
   db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
 }
 
+export function renameSession(sessionId: string, name: string): void {
+  const db = getDb();
+  db.prepare(
+    "UPDATE sessions SET name = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(name, sessionId);
+}
+
 export function updateSessionStatus(sessionId: string, status: string): void {
   const db = getDb();
   db.prepare(
@@ -81,6 +100,9 @@ export function registerSessionHandlers(ipcMain: Electron.IpcMain): void {
   ipcMain.handle('session:list', (_, { projectId }: { projectId?: string }) => listSessions(projectId));
   ipcMain.handle('session:create', (_, data: { projectDir: string; name: string }) => createSession(data));
   ipcMain.handle('session:delete', (_, sessionId: string) => deleteSession(sessionId));
-  ipcMain.handle('session:messages:save', (_, { sessionId, role, content, timestamp, thinking, toolSteps }: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[] }) => saveMessage(sessionId, role, content, timestamp, thinking, toolSteps));
+  ipcMain.handle('session:rename', (_, { sessionId, name }: { sessionId: string; name: string }) => renameSession(sessionId, name));
+  ipcMain.handle('session:messages:save', (_, { sessionId, role, content, timestamp, thinking, toolSteps, cost, duration, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens }: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[]; cost?: number; duration?: number; inputTokens?: number; outputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number }) =>
+    saveMessage(sessionId, role, content, timestamp, thinking, toolSteps, cost, duration, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+  );
   ipcMain.handle('session:messages:load', (_, sessionId: string) => loadMessages(sessionId));
 }

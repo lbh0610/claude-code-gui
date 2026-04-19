@@ -1,6 +1,6 @@
 /* ===================== 全局样式 — 暗色主题 ===================== */
 
-:root {
+[data-theme="dark"] {
   --bg-primary: #0A1628;
   --bg-card: #112240;
   --bg-card-hover: #162A4A;
@@ -171,7 +171,7 @@ body {
   border-radius: 50%;
   display: inline-block;
 }
-.status-dot.running, .status-dot.online { background: var(--success); box-shadow: 0 0 6px rgba(0, 230, 118, 0.4); }
+.status-dot.running, .status-dot.online { background: #34D399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.3); }
 .status-dot.idle { background: var(--warn); }
 .status-dot.error, .status-dot.offline { background: var(--danger); }
 
@@ -265,4 +265,75 @@ body {
   border-radius: 50%;
   background: var(--cyan);
   animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* ===================== 代码块 ===================== */
+
+.code-block-wrapper {
+  position: relative;
+  margin: 0.5em 0;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #0C1220;
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.code-block-lang {
+  text-transform: lowercase;
+  color: var(--cyan-dim);
+}
+
+.code-block-copy {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+.code-block-copy:hover {
+  background: rgba(0, 229, 255, 0.1);
+  color: var(--cyan);
+}
+
+/* ===================== 亮色主题 ===================== */
+
+[data-theme="light"], :root {
+  --bg-primary: #F5F7FA;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F0F4F8;
+  --border-color: #E2E8F0;
+  --cyan: #0099AA;
+  --cyan-dim: #007788;
+  --text-primary: #1A202C;
+  --text-secondary: #4A5568;
+  --text-dim: #A0AEC0;
+}
+
+[data-theme="light"] .chat-content code {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .chat-content pre {
+  background: #F7FAFC;
+  border: 1px solid var(--border-color);
+}
+
+[data-theme="light"] .code-block-header {
+  background: #F7FAFC;
+}
+
+[data-theme="light"] .code-block-wrapper {
+  background: #F7FAFC;
 }

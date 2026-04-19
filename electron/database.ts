@@ -31,16 +31,14 @@ export function getDb(): Database.Database {
   }
 
   // 迁移：为已存在的旧表添加缺失的列
-  try {
-    db.prepare('ALTER TABLE messages ADD COLUMN thinking TEXT').run();
-  } catch {
-    // 列已存在，忽略
-  }
-  try {
-    db.prepare('ALTER TABLE messages ADD COLUMN tool_steps TEXT').run();
-  } catch {
-    // 列已存在，忽略
-  }
+  try { db.prepare('ALTER TABLE messages ADD COLUMN thinking TEXT').run(); } catch {}
+  try { db.prepare('ALTER TABLE messages ADD COLUMN tool_steps TEXT').run(); } catch {}
+  try { db.prepare('ALTER TABLE messages ADD COLUMN cost REAL').run(); } catch {}
+  try { db.prepare('ALTER TABLE messages ADD COLUMN duration INTEGER').run(); } catch {}
+  try { db.prepare('ALTER TABLE messages ADD COLUMN input_tokens INTEGER').run(); } catch {}
+  try { db.prepare('ALTER TABLE messages ADD COLUMN output_tokens INTEGER').run(); } catch {}
+  try { db.prepare('ALTER TABLE messages ADD COLUMN cache_creation_tokens INTEGER').run(); } catch {}
+  try { db.prepare('ALTER TABLE messages ADD COLUMN cache_read_tokens INTEGER').run(); } catch {}
 
   return db;
 }

@@ -23,6 +23,12 @@ CREATE TABLE IF NOT EXISTS messages (
     content TEXT NOT NULL,
     thinking TEXT,
     tool_steps TEXT,
+    cost REAL,
+    duration INTEGER,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    cache_creation_tokens INTEGER,
+    cache_read_tokens INTEGER,
     timestamp INTEGER NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );

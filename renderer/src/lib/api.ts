@@ -15,8 +15,9 @@ export interface ElectronAPI {
     stop: (sessionId: string) => Promise<void>;
     input: (sessionId: string, input: string) => Promise<void>;
     status: () => Promise<{ status: string; pid: number | null; sessionCount: number }>;
-    onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[]; role?: 'user' | 'assistant' | 'system'; msgId?: string }) => void) => () => void;
+    onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[]; role?: 'user' | 'assistant' | 'system'; msgId?: string; cost?: number; duration?: number; inputTokens?: number; outputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number }) => void) => () => void;
     onStream: (cb: (data: { sessionId: string; thinking?: string; text?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => void) => () => void;
+    onTask: (cb: (data: { sessionId: string; type: string; subtype: string; timestamp: number; summary: string; raw: string }) => void) => () => void;
     onExit: (cb: (data: { sessionId: string; code: number; signal: string }) => void) => () => void;
     onStatus: (cb: (data: { status: string; pid: number | null }) => void) => () => void;
   };
@@ -24,8 +25,9 @@ export interface ElectronAPI {
     list: (projectId?: string) => Promise<unknown[]>;
     create: (data: { projectId?: string; projectDir: string; name: string }) => Promise<unknown>;
     delete: (sessionId: string) => Promise<void>;
+    rename: (sessionId: string, name: string) => Promise<void>;
     messages: {
-      save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[] }) => Promise<void>;
+      save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[]; cost?: number; duration?: number; inputTokens?: number; outputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number }) => Promise<void>;
       load: (sessionId: string) => Promise<unknown[]>;
     };
   };

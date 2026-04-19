@@ -42,6 +42,12 @@ const electronAPI = {
       ipcRenderer.on('cli-status', handler);
       return () => ipcRenderer.removeListener('cli-status', handler);
     },
+    // 任务执行流（所有 CLI 事件）
+    onTask: (cb: (data: { sessionId: string; type: string; subtype: string; timestamp: number; summary: string; raw: string }) => void) => {
+      const handler = (_: unknown, data: { sessionId: string; type: string; subtype: string; timestamp: number; summary: string; raw: string }) => cb(data);
+      ipcRenderer.on('cli-task', handler);
+      return () => ipcRenderer.removeListener('cli-task', handler);
+    },
   },
 
   // 会话管理
@@ -50,6 +56,7 @@ const electronAPI = {
     create: (data: { projectId?: string; projectDir: string; name: string }) =>
       ipcRenderer.invoke('session:create', data),
     delete: (sessionId: string) => ipcRenderer.invoke('session:delete', sessionId),
+    rename: (sessionId: string, name: string) => ipcRenderer.invoke('session:rename', { sessionId, name }),
     messages: {
       save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[] }) =>
         ipcRenderer.invoke('session:messages:save', data),

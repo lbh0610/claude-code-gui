@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -8,6 +9,12 @@ export interface ChatMessage {
   thinking?: string;
   toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[];
   timestamp: number;
+  cost?: number;
+  duration?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
 }
 
 interface ChatBubbleProps {
@@ -18,18 +25,14 @@ interface ChatBubbleProps {
 
 export default function ChatBubble({ message, isStreaming, onReady }: ChatBubbleProps) {
   const [copied, setCopied] = useState(false);
-  // 流式消息：思考和步骤默认展开（实时更新中）
-  // 非流式（最终结果）：自动收起
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const [stepsExpanded, setStepsExpanded] = useState(true);
 
   useEffect(() => {
     if (!isStreaming && message.thinking) {
-      // 非流式 + 有思考内容 → 自动收起
       setThinkingExpanded(false);
       onReady?.();
     } else if (isStreaming) {
-      // 流式中 → 保持展开，让用户实时看到
       setThinkingExpanded(true);
       setStepsExpanded(true);
     }
@@ -43,26 +46,48 @@ export default function ChatBubble({ message, isStreaming, onReady }: ChatBubble
     }
   }, [message.toolSteps?.length, isStreaming]);
 
-  if (message.role === 'system') {
-    return (
-      <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 11, color: 'var(--text-dim)' }}>
-        {message.content}
-      </div>
-    );
-  }
-
-  const handleCopy = async () => {
+  const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
+  }, [message.content]);
+
+  // 系统消息
+  if (message.role === 'system') {
+    const isInit = message.content.includes('已初始化') || message.content.includes('session_id');
+    const isResult = message.content.includes('执行完成') || message.content.includes('耗时');
+    const isError = message.content.includes('失败') || message.content.includes('错误') || message.content.includes('Error');
+    const icon = isInit ? '⚙' : isResult ? '✓' : isError ? '✗' : '•';
+    const color = isInit ? 'var(--cyan)' : isResult ? 'var(--success)' : isError ? 'var(--danger)' : 'var(--text-dim)';
+
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        padding: '6px 0',
+        fontSize: 11,
+        color,
+      }}>
+        <span style={{ fontSize: 12 }}>{icon}</span>
+        <span style={{
+          background: 'rgba(0,0,0,0.2)',
+          padding: '3px 12px',
+          borderRadius: 12,
+          border: `1px solid ${color}33`,
+        }}>
+          {message.content}
+        </span>
+      </div>
+    );
+  }
 
   const isUser = message.role === 'user';
   const hasThinking = !!message.thinking;
   const hasSteps = !!message.toolSteps && message.toolSteps.length > 0;
   const hasContent = !!message.content;
 
-  // 流式状态下无内容时，显示加载指示
   if (!hasContent && !hasThinking && !hasSteps && isStreaming) {
     return (
       <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '2px 0' }}>
@@ -102,7 +127,6 @@ export default function ChatBubble({ message, isStreaming, onReady }: ChatBubble
         {/* 复制按钮 */}
         {!isUser && !isStreaming && (
           <button
-            className="btn-copy"
             onClick={handleCopy}
             style={{
               position: 'absolute',
@@ -197,11 +221,11 @@ export default function ChatBubble({ message, isStreaming, onReady }: ChatBubble
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                background: 'rgba(0, 230, 118, 0.08)',
-                border: '1px solid rgba(0, 230, 118, 0.2)',
+                background: 'rgba(0, 180, 220, 0.08)',
+                border: '1px solid rgba(0, 180, 220, 0.2)',
                 borderRadius: 6,
                 padding: '4px 10px',
-                color: 'var(--success)',
+                color: 'var(--cyan-dim)',
                 fontSize: 12,
                 cursor: 'pointer',
                 width: '100%',
@@ -223,6 +247,7 @@ export default function ChatBubble({ message, isStreaming, onReady }: ChatBubble
                 {message.toolSteps!.map((step, i) => (
                   <div
                     key={i}
+                    className="code-block-wrapper"
                     style={{
                       padding: '6px 10px',
                       background: 'rgba(0, 0, 0, 0.25)',
@@ -276,12 +301,89 @@ export default function ChatBubble({ message, isStreaming, onReady }: ChatBubble
         {/* 正文内容 */}
         {hasContent && (
           <div className="chat-content">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={{
+                code: CodeBlock,
+              }}
+            >
               {message.content}
             </ReactMarkdown>
           </div>
         )}
+
+        {/* Token 和费用信息 */}
+        {!isUser && (message.cost !== undefined || message.inputTokens !== undefined || message.outputTokens !== undefined || message.duration !== undefined) && (
+          <div style={{
+            marginTop: 8,
+            paddingTop: 6,
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px 12px',
+            fontSize: 11,
+            color: 'var(--text-dim)',
+          }}>
+            {(message.inputTokens !== undefined || message.outputTokens !== undefined) && (
+              <span>
+                Tokens: ↓{formatNum(message.inputTokens ?? 0)} / ↑{formatNum(message.outputTokens ?? 0)}
+                {((message.cacheCreationTokens ?? 0) + (message.cacheReadTokens ?? 0)) > 0 && (
+                  <span style={{ opacity: 0.7 }}> (cache: +{formatNum((message.cacheCreationTokens ?? 0) + (message.cacheReadTokens ?? 0))})</span>
+                )}
+              </span>
+            )}
+            {message.cost !== undefined && <span>费用: ${message.cost.toFixed(4)}</span>}
+            {message.duration !== undefined && message.duration > 0 && <span>耗时: {(message.duration / 1000).toFixed(1)}s</span>}
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function formatNum(n: number): string {
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return String(n);
+}
+
+/** 带复制按钮的代码块 */
+function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLElement>) {
+  const [copied, setCopied] = useState(false);
+  const isInline = !className;
+  const code = String(children).replace(/\n$/, '');
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (isInline) {
+    return (
+      <code className={className} {...props}>
+        {children}
+      </code>
+    );
+  }
+
+  const language = className.replace('language-', '');
+
+  return (
+    <div className="code-block-wrapper">
+      <div className="code-block-header">
+        {language && <span className="code-block-lang">{language}</span>}
+        <button
+          onClick={handleCopy}
+          className="code-block-copy"
+          title="复制代码"
+        >
+          {copied ? '✓ 已复制' : '📋 复制'}
+        </button>
+      </div>
+      <code className={className} {...props}>
+        {children}
+      </code>
     </div>
   );
 }
