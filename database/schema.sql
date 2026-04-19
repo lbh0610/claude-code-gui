@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     project_dir TEXT NOT NULL,
     name TEXT,
+    tags TEXT DEFAULT '[]',
     status TEXT DEFAULT 'idle',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),

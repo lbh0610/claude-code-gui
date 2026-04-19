@@ -34,22 +34,24 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   useEffect(() => {
     api.config.get().then(cfg => {
       setConfig(cfg);
-      // 恢复主题
       if (cfg.theme && typeof cfg.theme === 'string') {
         onThemeChange?.(cfg.theme);
       }
     }).catch(() => {});
     api.session.list().then((s) => {
-      setSessions(s as { id: string; name: string; project_dir: string }[]);
-      // 自动选择最近的会话（列表第一个）
-      if (s.length > 0) {
-        handleSelectSession(s[0].id);
+      const typed = s as { id: string; name: string; project_dir: string }[];
+      setSessions(typed);
+      if (typed.length > 0) {
+        // 直接传 project_dir，不依赖 sessions.find()
+        handleSelectSession(typed[0].id, typed[0].project_dir);
       }
     }).catch(() => {});
+    api.skill.list().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 选择会话
-  const handleSelectSession = useCallback(async (sid: string) => {
+  const handleSelectSession = useCallback(async (sid: string, projectDir?: string) => {
     try {
       if (sessionId && isRunning && sessionId !== sid) {
         await api.cli.stop(sessionId);
@@ -59,13 +61,14 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
       taskMsgIdsRef.current.clear();
       setMsgSearch('');
 
-      const msgs = await api.session.messages.load(sid) as { role: string; content: string; thinking: string | null; tool_steps: string | null; cost: number | null; duration: number | null; input_tokens: number | null; output_tokens: number | null; cache_creation_tokens: number | null; cache_read_tokens: number | null; timestamp: number }[];
+      const msgs = await api.session.messages.load(sid) as { id: number; role: string; content: string; thinking: string | null; tool_steps: string | null; cost: number | null; duration: number | null; input_tokens: number | null; output_tokens: number | null; cache_creation_tokens: number | null; cache_read_tokens: number | null; timestamp: number }[];
       const parsedMsgs = (msgs || []).map(m => {
         let parsedSteps: unknown[] | undefined;
         if (m?.tool_steps) {
           try { parsedSteps = JSON.parse(m.tool_steps); } catch { /* ignore */ }
         }
         return {
+          id: m.id,
           role: (m?.role || 'system') as ChatMessage['role'],
           content: m?.content || '',
           thinking: m?.thinking || undefined,
@@ -84,13 +87,13 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
       isFirstUserMsg.current = !parsedMsgs.some(m => m.role === 'user');
       setStreamingMsg(null);
 
-      const session = sessions.find(s => s.id === sid);
-      if (session) {
-        setProjectDir(session.project_dir);
+      const dir = projectDir || sessions.find(s => s.id === sid)?.project_dir;
+      if (dir) {
+        setProjectDir(dir);
         // 保存最近会话
         const newConfig = { ...config, lastSessionId: sid };
         api.config.save(newConfig).catch(() => {});
-        const startResult = await api.cli.start(sid, session.project_dir, config);
+        const startResult = await api.cli.start(sid, dir, config);
         if (startResult.ok) setIsRunning(true);
       }
     } catch (err) {
@@ -204,6 +207,12 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
 
   const handleStop = useCallback(async () => {
     if (sessionId) { await api.cli.stop(sessionId); setIsRunning(false); setStreamingMsg(null); }
+  }, [sessionId]);
+
+  const handleDeleteMessage = useCallback(async (msgId: number) => {
+    if (!sessionId) return;
+    await api.session.messages.delete(sessionId, msgId);
+    setMessages(prev => prev.filter(m => m.id !== msgId));
   }, [sessionId]);
 
   const handleSendInput = useCallback(async () => {
@@ -369,7 +378,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
             }
             const list = await api.session.list().catch(() => []) as { id: string; name: string; project_dir: string }[];
             setSessions(list);
-            if (list.length > 0) handleSelectSession(list[0].id);
+            if (list.length > 0) handleSelectSession(list[0].id, list[0].project_dir);
           }}
           disabled={isRunning}
         >
@@ -442,7 +451,8 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
                 </div>
               ) : (
                 allMessages.map((msg, i) => (
-                  <ChatBubble key={i} message={msg} isStreaming={i === allMessages.length - 1 && !!streamingMsg} />
+                  <ChatBubble key={i} message={msg} isStreaming={i === allMessages.length - 1 && !!streamingMsg}
+                    messageId={msg.id} onDelete={msg.id ? () => handleDeleteMessage(msg.id!) : undefined} />
                 ))
               )}
               <div ref={messagesEndRef} />

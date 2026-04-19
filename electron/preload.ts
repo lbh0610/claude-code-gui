@@ -54,16 +54,18 @@ const electronAPI = {
 
   // 会话管理
   session: {
-    list: (projectId?: string) => ipcRenderer.invoke('session:list', { projectId }),
+    list: (projectId?: string, tag?: string) => ipcRenderer.invoke('session:list', { projectId, tag }),
     create: (data: { projectId?: string; projectDir: string; name: string }) =>
       ipcRenderer.invoke('session:create', data),
     delete: (sessionId: string) => ipcRenderer.invoke('session:delete', sessionId),
     rename: (sessionId: string, name: string) => ipcRenderer.invoke('session:rename', { sessionId, name }),
     autoTitle: (data: { sessionId: string; title: string }) => ipcRenderer.invoke('session:autoTitle', data),
+    updateTags: (data: { sessionId: string; tags: string[] }) => ipcRenderer.invoke('session:updateTags', data),
     messages: {
       save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[] }) =>
         ipcRenderer.invoke('session:messages:save', data),
       load: (sessionId: string) => ipcRenderer.invoke('session:messages:load', sessionId),
+      delete: (sessionId: string, messageId: number) => ipcRenderer.invoke('session:messages:delete', { sessionId, messageId }),
     },
   },
 

@@ -54,17 +54,26 @@ export async function startSession(
     const env = { ...process.env };
 
     if (config.apiKey && typeof config.apiKey === 'string') {
-      env.ANTHROPIC_API_KEY = config.apiKey;
+      const apiKey = config.apiKey as string;
+      // 跳过已加密的 key（enc: 开头），防止膨胀
+      if (!apiKey.startsWith('enc:') && apiKey.length < 10000) {
+        env.ANTHROPIC_API_KEY = apiKey;
+      }
     }
     if (config.proxy && typeof config.proxy === 'string') {
       env.HTTPS_PROXY = config.proxy;
       env.HTTP_PROXY = config.proxy;
     }
-    if (config.envVariables && typeof config.envVariables === 'object') {
-      Object.assign(env, config.envVariables);
+    if (config.envVariables && typeof config.envVariables === 'object' && !Array.isArray(config.envVariables)) {
+      for (const [key, val] of Object.entries(config.envVariables as Record<string, unknown>)) {
+        if (typeof val === 'string' && val.length < 16384) {
+          env[key] = val;
+        }
+      }
     }
     if (config.systemPrompt && typeof config.systemPrompt === 'string' && config.enableSystemPrompt !== false) {
-      env.CLAUDE_CODE_SYSTEM_PROMPT = config.systemPrompt;
+      const prompt = config.systemPrompt.slice(0, 4096);
+      if (prompt) env.CLAUDE_CODE_SYSTEM_PROMPT = prompt;
     }
 
     const args: string[] = [
@@ -222,7 +231,10 @@ export async function startSession(
     return { ok: true, pid: child.pid ?? null };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, pid: null, msg: `启动失败: ${msg}` };
+    const detail = (err as { code?: string })?.code === 'E2BIG'
+      ? `启动失败: 环境变量过大 (E2BIG)。请检查系统提示词长度或自定义环境变量。${msg}`
+      : `启动失败: ${msg}`;
+    return { ok: false, pid: null, msg: detail };
   }
 }
 

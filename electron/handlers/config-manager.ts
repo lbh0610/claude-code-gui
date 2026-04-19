@@ -32,9 +32,12 @@ function loadConfig(): Record<string, unknown> {
 }
 
 function saveConfig(config: Record<string, unknown>): void {
-  // API Key 加密存储
+  // API Key 加密存储（跳过已加密的值）
   if (config.apiKey && typeof config.apiKey === 'string' && config.apiKey.length > 0) {
-    config.apiKey = encryptValue(config.apiKey as string);
+    const key = config.apiKey as string;
+    if (!key.startsWith('enc:')) {
+      config.apiKey = encryptValue(key);
+    }
   }
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
 }

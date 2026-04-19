@@ -9,6 +9,7 @@ interface SessionRow {
   id: string;
   project_dir: string;
   name: string;
+  tags: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -16,13 +17,18 @@ interface SessionRow {
   summary: string | null;
 }
 
-export function listSessions(projectId?: string): SessionRow[] {
+export function listSessions(projectId?: string, tag?: string): SessionRow[] {
   const db = getDb();
   if (projectId) {
     const stmt = db.prepare(
       'SELECT * FROM sessions WHERE project_dir = ? ORDER BY updated_at DESC'
     );
     return stmt.all(projectId) as SessionRow[];
+  }
+  if (tag) {
+    return db.prepare(
+      "SELECT * FROM sessions WHERE tags LIKE ? ORDER BY updated_at DESC LIMIT 50"
+    ).all(`%"${tag}"%`) as SessionRow[];
   }
   const stmt = db.prepare('SELECT * FROM sessions ORDER BY updated_at DESC LIMIT 50');
   return stmt.all() as SessionRow[];
@@ -108,8 +114,21 @@ export function updateSessionStatus(sessionId: string, status: string): void {
   ).run(status, sessionId);
 }
 
+export function updateSessionTags(sessionId: string, tags: string[]): void {
+  const db = getDb();
+  db.prepare(
+    "UPDATE sessions SET tags = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(JSON.stringify(tags), sessionId);
+}
+
+export function deleteMessage(sessionId: string, messageId: number): void {
+  const db = getDb();
+  db.prepare('DELETE FROM messages WHERE id = ? AND session_id = ?').run(messageId, sessionId);
+  addLog('session', 'info', 'message_deleted', `消息 ${messageId} 已从会话 ${sessionId} 删除`, sessionId);
+}
+
 export function registerSessionHandlers(ipcMain: Electron.IpcMain): void {
-  ipcMain.handle('session:list', (_, { projectId }: { projectId?: string }) => listSessions(projectId));
+  ipcMain.handle('session:list', (_, { projectId, tag }: { projectId?: string; tag?: string }) => listSessions(projectId, tag));
   ipcMain.handle('session:create', (_, data: { projectDir: string; name: string }) => {
     const result = createSession(data);
     addLog('session', 'info', 'session_created', `会话 ${result.id} 已创建 (${data.projectDir})`, result.id);
@@ -124,5 +143,7 @@ export function registerSessionHandlers(ipcMain: Electron.IpcMain): void {
     saveMessage(sessionId, role, content, timestamp, thinking, toolSteps, cost, duration, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
   );
   ipcMain.handle('session:messages:load', (_, sessionId: string) => loadMessages(sessionId));
+  ipcMain.handle('session:messages:delete', (_, { sessionId, messageId }: { sessionId: string; messageId: number }) => deleteMessage(sessionId, messageId));
   ipcMain.handle('session:autoTitle', (_, { sessionId, title }: { sessionId: string; title: string }) => autoTitleSession(sessionId, title));
+  ipcMain.handle('session:updateTags', (_, { sessionId, tags }: { sessionId: string; tags: string[] }) => updateSessionTags(sessionId, tags));
 }

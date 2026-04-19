@@ -9,6 +9,7 @@ export interface ChatMessage {
   thinking?: string;
   toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[];
   timestamp: number;
+  id?: number;
   cost?: number;
   duration?: number;
   inputTokens?: number;
@@ -21,9 +22,11 @@ interface ChatBubbleProps {
   message: ChatMessage;
   isStreaming?: boolean;
   onReady?: () => void;
+  onDelete?: () => void;
+  messageId?: number;
 }
 
-export default function ChatBubble({ message, isStreaming, onReady }: ChatBubbleProps) {
+export default function ChatBubble({ message, isStreaming, onReady, onDelete }: ChatBubbleProps) {
   const [copied, setCopied] = useState(false);
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const [stepsExpanded, setStepsExpanded] = useState(true);
@@ -122,26 +125,45 @@ export default function ChatBubble({ message, isStreaming, onReady }: ChatBubble
           padding: '10px 14px',
           position: 'relative',
           opacity: isStreaming ? 0.85 : 1,
+          userSelect: 'text',
         }}
       >
-        {/* 复制按钮 */}
-        {!isUser && !isStreaming && (
-          <button
-            onClick={handleCopy}
-            style={{
-              position: 'absolute',
-              top: 6,
-              right: 8,
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-dim)',
-              fontSize: 11,
-              cursor: 'pointer',
-              opacity: 0.6,
-            }}
-          >
-            {copied ? '✓' : '📋'}
-          </button>
+        {/* 操作按钮 */}
+        {!isStreaming && message.role !== 'system' && (
+          <div style={{ position: 'absolute', top: 6, right: 8, display: 'flex', gap: 4 }}>
+            {!isUser && (
+              <button
+                onClick={handleCopy}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-dim)',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  opacity: 0.6,
+                }}
+                title="复制整条消息"
+              >
+                {copied ? '✓' : '📋'}
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={() => { if (confirm('删除此消息？')) onDelete(); }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-dim)',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  opacity: 0.6,
+                }}
+                title="删除消息"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         )}
 
         {/* 流式指示器 */}
