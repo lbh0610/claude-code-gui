@@ -40,10 +40,21 @@ function createWindow(): void {
   // 开发模式加载 Vite dev server，生产模式加载构建产物
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', '..', 'renderer', 'dist', 'index.html'));
   }
+
+  // 快捷键 Cmd+Option+I / Ctrl+Shift+I 切换开发者工具
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const isMac = process.platform === 'darwin';
+    if (isMac && input.meta && input.alt && input.key === 'i') {
+      mainWindow?.webContents.toggleDevTools();
+      event.preventDefault();
+    } else if (!isMac && input.control && input.shift && input.key === 'I') {
+      mainWindow?.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
 
   // 窗口内容准备就绪后显示
   mainWindow.once('ready-to-show', () => {
