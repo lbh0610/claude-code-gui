@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useToast } from '../components/Toast';
 
 // 日志条目的数据结构定义
 interface LogEntry {
@@ -17,6 +18,7 @@ interface LogEntry {
 // Logs 页面主组件：日志查看与管理
 export default function Logs() {
   const navigate = useNavigate();
+  const toast = useToast();
   // 日志列表数据
   const [logs, setLogs] = useState<LogEntry[]>([]);
   // 会话名称缓存：session_id -> name
@@ -145,7 +147,7 @@ export default function Logs() {
             <button className="btn btn-danger btn-sm" onClick={handleBatchDelete}>删除选中 ({selectedIds.size})</button>
           )}
           <button className="btn btn-secondary btn-sm" onClick={() => {
-            api.log.export(`/tmp/logs-${Date.now()}.json`, 'json').then(() => alert('已导出到 /tmp'));
+            api.log.export(`/tmp/logs-${Date.now()}.json`, 'json').then(() => toast.success('日志已导出到 /tmp'));
           }}>导出 JSON</button>
           <button className="btn btn-danger btn-sm" onClick={handleClear}>清空全部</button>
         </div>

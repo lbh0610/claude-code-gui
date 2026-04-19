@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 // 引入 API 实例
 import { api } from '../lib/api';
+import { useToast } from '../components/Toast';
 
 // 版本信息接口
 interface VersionInfo {
@@ -29,6 +30,7 @@ interface UpdateRecord {
 }
 
 export default function Updates() {
+  const toast = useToast();
   // 当前版本信息
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   // 在线更新信息
@@ -54,8 +56,7 @@ export default function Updates() {
 
   // 导入离线补丁
   const handleImportPatch = async () => {
-    // 在 Electron 中应使用 dialog.showOpenDialog，这里简化处理
-    alert('请选择离线补丁文件（.json）\n\n此功能需要在 Electron 环境中使用文件选择对话框');
+    toast.info('请选择离线补丁文件（.json）');
   };
 
   return (

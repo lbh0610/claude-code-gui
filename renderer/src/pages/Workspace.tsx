@@ -58,6 +58,10 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   // 右侧上下文面板显隐
   const [showRightPanel, setShowRightPanel] = useState(true);
+  // 左侧面板宽度（拖拽调整）
+  const [leftPanelWidth, setLeftPanelWidth] = useState(200);
+  // 消息加载状态
+  const [loadingMessages, setLoadingMessages] = useState(false);
 
   // 组件挂载时：加载配置和会话列表，自动恢复最近一次会话
   useEffect(() => {
@@ -99,6 +103,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   // 选择/切换会话的回调函数
   const handleSelectSession = useCallback(async (sid: string, projectDir?: string) => {
     try {
+      setLoadingMessages(true);
       // 如果当前有正在运行的会话且不是目标会话，先停止
       if (sessionId && isRunning && sessionId !== sid) {
         await api.cli.stop(sessionId);
@@ -161,6 +166,8 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
       console.error('[handleSelectSession] error:', err);
       setMessages([{ role: 'system' as const, content: `加载会话失败: ${err instanceof Error ? err.message : String(err)}`, timestamp: Date.now() }]);
       isFirstUserMsg.current = false;
+    } finally {
+      setLoadingMessages(false);
     }
   }, [sessions, config, sessionId, isRunning]);
 
@@ -507,7 +514,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {showLeftPanel && (
-          <div style={{ width: 200, borderRight: '1px solid var(--border-color)', padding: 8, overflow: 'auto', flexShrink: 0 }}>
+          <div style={{ width: leftPanelWidth, borderRight: '1px solid var(--border-color)', padding: 8, overflow: 'auto', flexShrink: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>会话历史</span>
             {sessionId && (
@@ -538,6 +545,32 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
           )}
           </div>
         )}
+        {showLeftPanel && (
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startWidth = leftPanelWidth;
+              const onMove = (ev: MouseEvent) => {
+                const diff = ev.clientX - startX;
+                setLeftPanelWidth(Math.max(150, Math.min(400, startWidth + diff)));
+              };
+              const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            }}
+            style={{
+              width: 4, cursor: 'col-resize', flexShrink: 0,
+              background: 'transparent',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--cyan)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          />
+        )}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -558,7 +591,37 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
 
           <ErrorBoundary>
             <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {allMessages.length === 0 ? (
+              {loadingMessages ? (
+                // 骨架屏
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 0' }}>
+                  {[1, 2, 3].map(i => (
+                    <div key={i} style={{
+                      display: 'flex', gap: 12, alignItems: 'flex-start',
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                      animationDelay: `${i * 0.2}s`,
+                    }}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: '50%',
+                        background: 'var(--border-color)', flexShrink: 0,
+                      }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          height: 14, borderRadius: 4,
+                          background: 'var(--border-color)', width: '60%', marginBottom: 8,
+                        }} />
+                        <div style={{
+                          height: 12, borderRadius: 4,
+                          background: 'var(--border-color)', width: '90%', marginBottom: 6,
+                        }} />
+                        <div style={{
+                          height: 12, borderRadius: 4,
+                          background: 'var(--border-color)', width: '75%',
+                        }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : allMessages.length === 0 ? (
                 <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 60, fontSize: 14 }}>
                   {msgSearch ? '无匹配消息' : '暂无消息，启动会话后开始对话'}
                 </div>

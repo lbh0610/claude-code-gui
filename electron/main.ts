@@ -4,7 +4,7 @@ import path from 'node:path';
 import { ensureDirs, detectCli, readClaudeCliConfig, CONFIG_PATH } from './config';
 import { closeDb } from './database';
 import { registerConfigHandlers } from './handlers/config-manager';
-import { registerCliHandlers, setMainWindow } from './handlers/cli-manager';
+import { registerCliHandlers, setMainWindow, getStatus } from './handlers/cli-manager';
 import { registerSessionHandlers } from './handlers/session-manager';
 import { registerLogHandlers } from './handlers/log-manager';
 import { registerPluginHandlers } from './handlers/plugin-manager';
@@ -89,6 +89,25 @@ function createWindow(): void {
   // 窗口内容准备就绪后显示
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+  });
+
+  // 窗口关闭时检查是否有正在运行的 CLI 会话
+  mainWindow.on('close', (e) => {
+    const status = getStatus();
+    if (status.status === 'running') {
+      const { response } = require('electron').dialog.showMessageBoxSync(mainWindow!, {
+        type: 'warning',
+        buttons: ['取消', '直接退出'],
+        defaultId: 0,
+        cancelId: 0,
+        title: '确认退出',
+        message: 'CLI 会话正在运行中',
+        detail: `当前有 ${status.sessionCount} 个活跃会话（PID: ${status.pid}）。\n确定要退出吗？`,
+      });
+      if (response === 0) {
+        e.preventDefault();
+      }
+    }
   });
 
   // 窗口关闭时释放引用

@@ -28,6 +28,8 @@ export default function Home() {
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>([]);
   // 今日统计数据
   const [todayStats, setTodayStats] = useState({ count: 0, tokens: 0, cost: 0 });
+  // CLI 检测状态
+  const [cliDetected, setCliDetected] = useState(false);
   // Cmd+K 快速跳转面板显隐
   const [showCmdK, setShowCmdK] = useState(false);
   // Cmd+K 搜索输入
@@ -52,11 +54,12 @@ export default function Home() {
     return unsub;
   }, []);
 
-  // 挂载时：加载最近会话、今日统计、全部会话
+  // 挂载时：加载最近会话、今日统计、全部会话、CLI 检测
   useEffect(() => {
     loadRecent();
     loadTodayStats();
     loadAllSessions();
+    api.cli.detect().then((r: { found: boolean }) => setCliDetected(r.found)).catch(() => {});
   }, []);
 
   // 加载最近 5 条会话及其消息数量
@@ -211,7 +214,19 @@ export default function Home() {
         <QuickAction
           icon="💬"
           title="新建会话"
-          desc="开始新的 AI 对话"
+          desc={cliDetected ? '开始新的 AI 对话' : 'CLI 未安装，点击前往设置'}
+          onClick={() => {
+            if (cliDetected) {
+              navigate('/workspace');
+            } else {
+              navigate('/settings');
+            }
+          }}
+        />
+        <QuickAction
+          icon="🚀"
+          title="纯对话模式"
+          desc="不绑定项目，快速对话"
           onClick={() => navigate('/workspace')}
         />
         <QuickAction

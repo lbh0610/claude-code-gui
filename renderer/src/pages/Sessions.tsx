@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 // 引入 API 实例
 import { api } from '../lib/api';
+import { useToast } from '../components/Toast';
 
 // 会话数据接口
 interface Session {
@@ -27,6 +28,7 @@ interface SessionStats {
 
 export default function Sessions() {
   const navigate = useNavigate();
+  const toast = useToast();
   // 会话列表
   const [sessions, setSessions] = useState<Session[]>([]);
   // 每个会话的统计信息
@@ -85,7 +87,7 @@ export default function Sessions() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: unknown) {
-      alert('导出失败: ' + (e instanceof Error ? e.message : String(e)));
+      toast.error('导出失败: ' + (e instanceof Error ? e.message : String(e)));
     }
   };
 

@@ -2,10 +2,13 @@
 import { useState, useEffect } from 'react';
 // 引入 API 实例
 import { api } from '../lib/api';
+// 引入 Toast 钩子
+import { useToast } from '../components/Toast';
 
 // 设置菜单项配置
 const SETTINGS_SECTIONS = [
   { id: 'general', label: '通用' },
+  { id: 'cli', label: 'CLI 引擎' },
   { id: 'systemPrompt', label: '系统提示词' },
   { id: 'account', label: '账号与密钥' },
   { id: 'gateway', label: '模型与网关' },
@@ -14,6 +17,8 @@ const SETTINGS_SECTIONS = [
 ];
 
 export default function Settings() {
+  // Toast 通知
+  const toast = useToast();
   // 当前激活的设置面板 ID
   const [activeSection, setActiveSection] = useState('account');
   // 配置数据对象
@@ -24,6 +29,12 @@ export default function Settings() {
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   // 保存中状态
   const [saving, setSaving] = useState(false);
+  // CLI 检测状态
+  const [cliDetected, setCliDetected] = useState(false);
+  const [cliPath, setCliPath] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installMsg, setInstallMsg] = useState('');
+  const [cliConfigImported, setCliConfigImported] = useState(false);
 
   // 挂载时加载配置
   useEffect(() => {
@@ -37,6 +48,11 @@ export default function Settings() {
         onThemeChange?.(cfg.theme);
       }
     }).catch(() => {});
+    // 检测 CLI
+    api.cli.detect().then((r: { found: boolean; path: string | null }) => {
+      setCliDetected(r.found);
+      setCliPath(r.path);
+    }).catch(() => {});
   }, []);
 
   // 保存配置到后端
@@ -49,6 +65,7 @@ export default function Settings() {
         toSave.apiKey = apiKeyInput;
       }
       await api.config.save(toSave);
+      toast.success('配置已保存');
     } finally {
       setSaving(false);
     }
@@ -59,6 +76,8 @@ export default function Settings() {
     setTestResult(null);
     const result = await api.config.testConnection(config);
     setTestResult(result);
+    if (result.ok) toast.success(result.msg);
+    else toast.error(result.msg);
   };
 
   return (
@@ -240,11 +259,102 @@ export default function Settings() {
                   if (!file) return;
                   const text = await file.text();
                   const result = await api.config.import(text);
-                  alert(result.msg);
-                  if (result.ok) api.config.get().then(setConfig).catch(() => {});
+                  if (result.ok) {
+                    toast.success(result.msg);
+                    api.config.get().then(setConfig).catch(() => {});
+                  } else {
+                    toast.error(result.msg);
+                  }
                 };
                 input.click();
               }}>导入配置</button>
+            </div>
+
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+              {saving ? '保存中...' : '保存'}
+            </button>
+          </div>
+        )}
+
+        {/* CLI 引擎设置 */}
+        {activeSection === 'cli' && (
+          <div style={{ maxWidth: 500 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+              Claude CLI 检测
+            </div>
+            <div style={{
+              padding: 12, borderRadius: 8, marginBottom: 16,
+              background: cliDetected ? 'rgba(0,230,118,0.08)' : 'rgba(239,68,68,0.08)',
+              border: `1px solid ${cliDetected ? 'rgba(0,230,118,0.3)' : 'rgba(239,68,68,0.3)'}`,
+            }}>
+              <div style={{ fontSize: 13, color: cliDetected ? 'var(--success)' : 'var(--danger)', marginBottom: 4 }}>
+                {cliDetected ? '已安装' : '未检测到'}
+              </div>
+              {cliPath && (
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                  {cliPath}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <button className="btn btn-secondary btn-sm" onClick={async () => {
+                const r = await api.cli.detect();
+                setCliDetected(r.found);
+                setCliPath(r.path);
+                if (r.found) toast.success(`检测到 CLI: ${r.path}`);
+                else toast.warn('未检测到 claude，请安装或检查 PATH');
+              }}>
+                重新检测
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={async () => {
+                if (cliDetected) { toast.info('CLI 已安装，如需重新安装请先卸载'); return; }
+                setInstalling(true);
+                setInstallMsg('');
+                // 订阅安装进度
+                const unsub = api.cli.onInstallProgress((msg: string) => setInstallMsg(msg));
+                try {
+                  const r = await api.cli.install(false);
+                  if (r.ok) {
+                    setCliDetected(true);
+                    setCliPath(r.path || null);
+                    toast.success('CLI 安装成功');
+                  } else {
+                    toast.error(r.error || '安装失败');
+                  }
+                } catch (e: unknown) {
+                  toast.error(e instanceof Error ? e.message : '安装失败');
+                } finally {
+                  setInstalling(false);
+                  unsub();
+                }
+              }} disabled={installing}>
+                {installing ? '安装中...' : '安装 CLI'}
+              </button>
+            </div>
+            {installing && installMsg && (
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 12 }}>{installMsg}</div>
+            )}
+
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                从 Claude CLI 导入配置
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 12 }}>
+                自动从 ~/.claude/settings.json 读取 API Key、网关和模型配置
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={async () => {
+                const r = await api.config.importFromClaude();
+                if (r.ok) {
+                  toast.success(r.msg);
+                  setCliConfigImported(true);
+                  api.config.get().then(setConfig).catch(() => {});
+                } else {
+                  toast.warn(r.msg);
+                }
+              }}>
+                {cliConfigImported ? '已导入，点击重新导入' : '导入配置'}
+              </button>
             </div>
 
             <button className="btn btn-primary" onClick={handleSave} disabled={saving}>

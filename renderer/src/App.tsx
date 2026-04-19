@@ -7,6 +7,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // 引入布局组件
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
+// 引入 Toast 组件
+import { ToastProvider } from './components/Toast';
 // 引入所有页面组件
 import Home from './pages/Home';
 import Workspace from './pages/Workspace';
@@ -16,7 +18,7 @@ import Logs from './pages/Logs';
 import Plugins from './pages/Plugins';
 import Updates from './pages/Updates';
 import Skills from './pages/Skills';
-// 引入 API 实例
+import OnboardingWizard from './components/OnboardingWizard';
 import { api } from './lib/api';
 
 // 创建 React Query 客户端实例，用于全局数据缓存
@@ -27,6 +29,10 @@ export default function App() {
   const [theme, setTheme] = useState(() => {
     const stored = localStorage.getItem('theme');
     return stored || 'light';
+  });
+  // 首次启动引导状态
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem('hasSeenOnboarding');
   });
 
   // 组件挂载时：同步 localStorage 和配置中的主题
@@ -49,8 +55,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <HashRouter>
-        <div
-          style={{
+        <ToastProvider>
+          <div
+            style={{
             display: 'flex',
             flexDirection: 'column',
             height: '100vh',
@@ -75,6 +82,8 @@ export default function App() {
             </main>
           </div>
         </div>
+        {showOnboarding && <OnboardingWizard onComplete={() => { localStorage.setItem('hasSeenOnboarding', '1'); setShowOnboarding(false); }} />}
+        </ToastProvider>
       </HashRouter>
     </QueryClientProvider>
   );
