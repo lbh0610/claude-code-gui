@@ -1,49 +1,68 @@
+// 引入状态管理、副作用钩子和回调钩子
 import { useState, useEffect, useCallback } from 'react';
+// 引入 Markdown 渲染组件
 import ReactMarkdown from 'react-markdown';
+// 引入 GFM（GitHub Flavored Markdown）插件
 import remarkGfm from 'remark-gfm';
+// 引入 API 实例
 import { api } from '../lib/api';
 
+// Skill 详情接口
 interface Skill {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
-  subdirs: string[];
-  enabled: boolean;
+  id: string;           // Skill 唯一标识
+  name: string;         // Skill 名称
+  description: string;  // Skill 描述
+  content: string;      // SKILL.md 正文内容
+  subdirs: string[];    // 子目录列表
+  enabled: boolean;     // 是否启用
 }
 
+// 空表单初始值
 const emptyForm = { name: '', desc: '', content: '' };
 
 export default function Skills() {
+  // Skill 列表（简略信息）
   const [skills, setSkills] = useState<{ id: string; name: string; description: string; enabled: boolean }[]>([]);
+  // 当前选中的 Skill ID
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 当前选中的 Skill 详情
   const [detail, setDetail] = useState<Skill | null>(null);
+  // 搜索关键词
   const [search, setSearch] = useState('');
+  // 当前模式：查看/编辑/新建
   const [mode, setMode] = useState<'view' | 'edit' | 'new'>('view');
+  // 表单数据
   const [form, setForm] = useState(emptyForm);
+  // 保存中状态
   const [saving, setSaving] = useState(false);
 
+  // 挂载时加载 Skill 列表
   useEffect(() => { loadSkills(); }, []);
 
+  // 从 API 加载 Skill 列表
   const loadSkills = async () => {
     setSkills(await api.skill.list());
   };
 
+  // 选中 Skill 并加载详情
   const handleSelect = useCallback(async (id: string) => {
     setSelectedId(id);
     setMode('view');
     setDetail(await api.skill.get(id));
   }, []);
 
+  // 根据搜索关键词过滤
   const filtered = skills.filter(s =>
     !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.description.toLowerCase().includes(search.toLowerCase())
   );
 
+  // 执行保存操作（新建或更新）
   const doSave = async () => {
     if (!selectedId || !form.name.trim()) return;
     setSaving(true);
     try {
       if (mode === 'new') {
+        // 新建模式
         const result = await api.skill.create({ name: form.name.trim(), description: form.desc.trim(), content: form.content.trim() });
         if (result.ok) {
           setMode('view'); setForm(emptyForm);
@@ -51,6 +70,7 @@ export default function Skills() {
           await handleSelect(result.id);
         }
       } else {
+        // 更新模式
         await api.skill.update({ id: selectedId, name: form.name, description: form.desc, content: form.content });
         setMode('view');
         await handleSelect(selectedId);
@@ -61,21 +81,26 @@ export default function Skills() {
     }
   };
 
+  // 删除 Skill
   const handleDelete = async (id: string) => {
     if (!confirm('确定删除此 Skill？此操作不可恢复。')) return;
     await api.skill.delete(id);
+    // 如果删除的是当前选中的 Skill，清空详情
     if (selectedId === id) { setSelectedId(null); setDetail(null); }
     await loadSkills();
   };
 
+  // 切换 Skill 启用/禁用状态
   const handleToggle = async (id: string, enabled: boolean) => {
     await api.skill.toggle(id, enabled);
     await loadSkills();
+    // 同步更新当前详情
     if (detail && id === detail.id) {
       setDetail({ ...detail, enabled });
     }
   };
 
+  // 进入编辑模式，填充表单数据
   const startEdit = () => {
     if (!detail) return;
     setForm({ name: detail.name, desc: detail.description, content: detail.content });

@@ -1,61 +1,76 @@
 import { useState, useEffect, useCallback } from 'react';
+// 导入 Markdown 渲染库及插件
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 
+// 聊天消息的数据结构定义
 export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  thinking?: string;
-  toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[];
-  timestamp: number;
-  id?: number;
-  cost?: number;
-  duration?: number;
-  inputTokens?: number;
-  outputTokens?: number;
-  cacheCreationTokens?: number;
-  cacheReadTokens?: number;
+  role: 'user' | 'assistant' | 'system'; // 消息角色：用户/助手/系统
+  content: string;                        // 消息正文内容
+  thinking?: string;                      // 思考过程（可选）
+  toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[]; // 工具调用步骤列表（可选）
+  timestamp: number;                      // 消息时间戳
+  id?: number;                            // 消息唯一ID（可选）
+  cost?: number;                          // 调用费用（可选）
+  duration?: number;                      // 响应耗时（可选）
+  inputTokens?: number;                   // 输入 token 数量（可选）
+  outputTokens?: number;                  // 输出 token 数量（可选）
+  cacheCreationTokens?: number;           // 缓存创建 token 数量（可选）
+  cacheReadTokens?: number;               // 缓存读取 token 数量（可选）
 }
 
+// ChatBubble 组件的 props 接口定义
 interface ChatBubbleProps {
-  message: ChatMessage;
-  isStreaming?: boolean;
-  onReady?: () => void;
-  onDelete?: () => void;
-  messageId?: number;
+  message: ChatMessage;   // 要渲染的聊天消息
+  isStreaming?: boolean;  // 是否处于流式输出状态（可选）
+  onReady?: () => void;   // 消息渲染完成后的回调（可选）
+  onDelete?: () => void;  // 删除消息的回调（可选）
+  messageId?: number;     // 消息ID（可选）
 }
 
+// ChatBubble 主组件：渲染单条聊天消息气泡
 export default function ChatBubble({ message, isStreaming, onReady, onDelete }: ChatBubbleProps) {
+  // 复制按钮的状态：是否已复制
   const [copied, setCopied] = useState(false);
+  // 思考过程区域的展开/折叠状态
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
+  // 执行步骤区域的展开/折叠状态
   const [stepsExpanded, setStepsExpanded] = useState(true);
 
+  // 根据消息内容和流式状态自动调整思考区域的展开状态
   useEffect(() => {
     if (!isStreaming && message.thinking) {
+      // 非流式且有思考内容时，默认折叠思考区域，并通知父组件已就绪
       setThinkingExpanded(false);
       onReady?.();
     } else if (isStreaming) {
+      // 流式输出时保持展开
       setThinkingExpanded(true);
       setStepsExpanded(true);
     }
   }, [message.thinking, isStreaming]);
 
+  // 根据工具步骤数量和流式状态自动调整执行步骤区域的展开状态
   useEffect(() => {
     if (!isStreaming && message.toolSteps?.length) {
+      // 非流式且有工具步骤时，默认折叠
       setStepsExpanded(false);
     } else if (isStreaming) {
+      // 流式输出时保持展开
       setStepsExpanded(true);
     }
   }, [message.toolSteps?.length, isStreaming]);
 
+  // 复制消息正文到剪贴板的处理函数
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
+    // 2秒后重置复制状态
     setTimeout(() => setCopied(false), 2000);
   }, [message.content]);
 
-  // 系统消息
+  // 系统消息：居中显示，根据内容关键词自动匹配图标和颜色
   if (message.role === 'system') {
     const isInit = message.content.includes('已初始化') || message.content.includes('session_id');
     const isResult = message.content.includes('执行完成') || message.content.includes('耗时');
@@ -86,11 +101,13 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
     );
   }
 
+  // 判断消息类型和内容是否存在
   const isUser = message.role === 'user';
   const hasThinking = !!message.thinking;
   const hasSteps = !!message.toolSteps && message.toolSteps.length > 0;
   const hasContent = !!message.content;
 
+  // 流式输出初期：没有任何内容时显示"思考中..."加载指示
   if (!hasContent && !hasThinking && !hasSteps && isStreaming) {
     return (
       <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '2px 0' }}>
@@ -110,6 +127,7 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
     );
   }
 
+  // 主渲染逻辑：根据角色决定对齐方向（用户消息靠右，助手消息靠左）
   return (
     <div
       style={{
@@ -182,7 +200,7 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
           </div>
         )}
 
-        {/* 思考过程 */}
+        {/* 思考过程区域 */}
         {hasThinking && (
           <div style={{ marginBottom: 8 }}>
             <button
@@ -234,7 +252,7 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
           </div>
         )}
 
-        {/* 执行步骤 */}
+        {/* 执行步骤区域 */}
         {hasSteps && (
           <div style={{ marginBottom: 8 }}>
             <button
@@ -320,7 +338,7 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
           </div>
         )}
 
-        {/* 正文内容 */}
+        {/* 正文内容：使用 Markdown 渲染 */}
         {hasContent && (
           <div className="chat-content">
             <ReactMarkdown
@@ -335,7 +353,7 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
           </div>
         )}
 
-        {/* Token 和费用信息 */}
+        {/* Token 用量和费用统计信息（仅助手消息） */}
         {!isUser && (message.cost !== undefined || message.inputTokens !== undefined || message.outputTokens !== undefined || message.duration !== undefined) && (
           <div style={{
             marginTop: 8,
@@ -364,23 +382,29 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
   );
 }
 
+// 数字格式化：超过1000时显示为 k 单位
 function formatNum(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
   return String(n);
 }
 
-/** 带复制按钮的代码块 */
+// CodeBlock 子组件：渲染代码块，支持行内代码和块级代码，带复制按钮
 function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLElement>) {
+  // 复制按钮状态
   const [copied, setCopied] = useState(false);
+  // 判断是否为行内代码（无 className 说明没有 language-xxx 类名）
   const isInline = !className;
+  // 提取代码文本并去除末尾换行
   const code = String(children).replace(/\n$/, '');
 
+  // 复制代码到剪贴板的处理函数
   const handleCopy = async () => {
     await navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // 行内代码直接渲染，不添加额外结构
   if (isInline) {
     return (
       <code className={className} {...props}>
@@ -389,8 +413,10 @@ function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLE
     );
   }
 
+  // 从 className 中提取语言名称（如 "language-javascript" -> "javascript"）
   const language = className.replace('language-', '');
 
+  // 块级代码：渲染带语言标签和复制按钮的代码块
   return (
     <div className="code-block-wrapper">
       <div className="code-block-header">

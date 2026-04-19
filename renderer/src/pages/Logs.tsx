@@ -1,72 +1,88 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../lib/api';
 
+// 日志条目的数据结构定义
 interface LogEntry {
-  id: number;
-  timestamp: string;
-  component: string | null;
-  level: string;
-  event: string | null;
-  summary: string | null;
-  session_id: string | null;
+  id: number;            // 日志唯一ID
+  timestamp: string;     // 时间戳
+  component: string | null; // 所属组件名（可为空）
+  level: string;         // 日志级别（info/warn/error）
+  event: string | null;  // 事件名称（可为空）
+  summary: string | null; // 摘要内容（可为空）
+  session_id: string | null; // 关联的会话ID（可为空）
 }
 
+// Logs 页面主组件：日志查看与管理
 export default function Logs() {
+  // 日志列表数据
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  // 日志级别筛选条件
   const [filterLevel, setFilterLevel] = useState('');
+  // 组件筛选条件
   const [filterComponent, setFilterComponent] = useState('');
+  // 搜索关键词
   const [search, setSearch] = useState('');
+  // 当前选中的单条日志（用于详情面板）
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  // 批量选中的日志ID集合
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
+  // 当级别或组件筛选条件变化时，重新加载日志
   useEffect(() => { loadLogs(); }, [filterLevel, filterComponent]);
 
+  // 从 API 加载日志列表
   const loadLogs = async () => {
     const data = await api.log.list({
-      level: filterLevel || undefined,
+      level: filterLevel || undefined,       // 空值转为 undefined 以跳过该筛选
       component: filterComponent || undefined,
-      search: search.trim() || undefined,
-      limit: 500,
+      search: search.trim() || undefined,    // 去除首尾空格
+      limit: 500,                            // 最多返回500条
     });
     setLogs(data as LogEntry[]);
-    setSelectedIds(new Set());
+    setSelectedIds(new Set());               // 重置选中状态
   };
 
+  // 删除单条日志的处理函数
   const handleDelete = async (id: number) => {
     await api.log.delete(id);
-    if (selectedLog?.id === id) setSelectedLog(null);
-    await loadLogs();
+    if (selectedLog?.id === id) setSelectedLog(null); // 如果删除的是当前查看的日志，关闭详情面板
+    await loadLogs();                       // 重新加载列表
   };
 
+  // 清空全部日志的处理函数
   const handleClear = async () => {
     if (!confirm('确定清空全部日志？此操作不可恢复。')) return;
     await api.log.clear();
-    setLogs([]);
-    setSelectedLog(null);
-    setSelectedIds(new Set());
+    setLogs([]);                            // 清空本地状态
+    setSelectedLog(null);                   // 关闭详情面板
+    setSelectedIds(new Set());              // 重置选中状态
   };
 
+  // 批量删除选中日志的处理函数
   const handleBatchDelete = async () => {
-    if (selectedIds.size === 0) return;
+    if (selectedIds.size === 0) return;     // 没有选中项时直接返回
     if (!confirm(`确定删除选中的 ${selectedIds.size} 条日志？`)) return;
-    for (const id of selectedIds) await api.log.delete(id);
-    setSelectedIds(new Set());
-    setSelectedLog(null);
-    await loadLogs();
+    for (const id of selectedIds) await api.log.delete(id); // 逐条删除
+    setSelectedIds(new Set());              // 重置选中状态
+    setSelectedLog(null);                   // 关闭详情面板
+    await loadLogs();                       // 重新加载列表
   };
 
+  // 切换单条日志的选中状态
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.has(id) ? next.delete(id) : next.add(id); // 已选中则取消，未选中则添加
       return next;
     });
   };
 
+  // 全选/取消全选当前列表中的所有日志
   const toggleSelectAll = () => {
     setSelectedIds(selectedIds.size === logs.length ? new Set() : new Set(logs.map(l => l.id)));
   };
 
+  // 从日志列表中提取所有不重复的组件名，用于筛选下拉框
   const components = useMemo(() => [...new Set(logs.map(l => l.component).filter(Boolean))], [logs]);
 
   return (

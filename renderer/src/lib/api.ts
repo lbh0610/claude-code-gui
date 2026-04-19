@@ -1,10 +1,6 @@
-/**
- * IPC 调用封装 + 类型声明
- * 渲染进程通过 window.electronAPI 调用主进程功能
- */
-
-// ElectronAPI 类型声明（实际由 preload.ts 的 contextBridge 暴露）
+// 声明 ElectronAPI 接口类型，定义所有 IPC 调用的签名
 export interface ElectronAPI {
+  // 配置管理：获取、保存、测试连接、导入导出
   config: {
     get: () => Promise<Record<string, unknown>>;
     save: (config: Record<string, unknown>) => Promise<void>;
@@ -12,17 +8,24 @@ export interface ElectronAPI {
     export: () => Promise<Record<string, unknown>>;
     import: (filePath: string) => Promise<{ ok: boolean; msg: string }>;
   };
+  // CLI 引擎：启动、停止、输入、状态、事件监听
   cli: {
     start: (sessionId: string, projectDir: string, config: Record<string, unknown>) => Promise<{ ok: boolean; pid: number | null; msg?: string }>;
     stop: (sessionId: string) => Promise<void>;
     input: (sessionId: string, input: string) => Promise<void>;
     status: () => Promise<{ status: string; pid: number | null; sessionCount: number }>;
+    // 输出事件监听回调注册器，返回取消订阅函数
     onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[]; role?: 'user' | 'assistant' | 'system'; msgId?: string; cost?: number; duration?: number; inputTokens?: number; outputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number }) => void) => () => void;
+    // 流式更新事件监听
     onStream: (cb: (data: { sessionId: string; thinking?: string; text?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => void) => () => void;
+    // 任务事件监听
     onTask: (cb: (data: { sessionId: string; type: string; subtype: string; timestamp: number; summary: string; raw: string }) => void) => () => void;
+    // 进程退出事件监听
     onExit: (cb: (data: { sessionId: string; code: number; signal: string }) => void) => () => void;
+    // 进程状态变化事件监听
     onStatus: (cb: (data: { status: string; pid: number | null }) => void) => () => void;
   };
+  // 会话管理：列表、创建、删除、重命名、标签、消息操作
   session: {
     list: (projectId?: string, tag?: string) => Promise<unknown[]>;
     create: (data: { projectId?: string; projectDir: string; name: string }) => Promise<unknown>;
@@ -36,6 +39,7 @@ export interface ElectronAPI {
       delete: (sessionId: string, messageId: number) => Promise<void>;
     };
   };
+  // 日志管理：查询、导出、诊断、删除
   log: {
     list: (filter?: Record<string, unknown>) => Promise<unknown[]>;
     export: (filePath: string, format: string) => Promise<void>;
@@ -43,15 +47,18 @@ export interface ElectronAPI {
     delete: (id: number) => Promise<void>;
     clear: () => Promise<void>;
   };
+  // 插件管理：列表、切换状态
   plugin: {
     list: () => Promise<unknown[]>;
     toggle: (id: string, enabled: boolean) => Promise<void>;
   };
+  // 更新管理：检查、导入补丁、版本信息
   update: {
     check: () => Promise<unknown>;
     importPatch: (filePath: string) => Promise<{ ok: boolean; msg: string }>;
     info: () => Promise<unknown>;
   };
+  // Skill 管理：列表、获取、创建、更新、删除、切换
   skill: {
     list: () => Promise<{ id: string; name: string; description: string; enabled: boolean }[]>;
     get: (id: string) => Promise<{ id: string; name: string; description: string; content: string; subdirs: string[]; enabled: boolean } | null>;
@@ -60,29 +67,35 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<{ ok: boolean; msg?: string }>;
     toggle: (id: string, enabled: boolean) => Promise<void>;
   };
+  // 文件系统：选择目录、读取文件
   fs: {
     selectDirectory: () => Promise<string | null>;
     readFile: (filePath: string) => Promise<string>;
   };
+  // 应用信息：版本、平台
   app: {
     getVersion: () => Promise<string>;
     getPlatform: () => Promise<unknown>;
   };
+  // 系统诊断：获取诊断报告
   diagnostic: {
     get: () => Promise<unknown>;
   };
 }
 
+// 将 electronAPI 挂载到 window 对象上（由 preload.ts 的 contextBridge 提供）
 declare global {
   interface Window {
     electronAPI: ElectronAPI;
   }
 }
 
-// 浏览器开发模式下的 mock API（Electron 环境中由 preload.ts 的 contextBridge 提供真实实现）
+// 获取 API 实例：Electron 环境使用真实实现，浏览器开发模式使用 mock
 function getApi(): ElectronAPI {
+  // 如果 window.electronAPI 已存在（Electron 环境），直接使用
   if (window.electronAPI) return window.electronAPI;
 
+  // 浏览器开发模式下的 mock 实现
   return {
     config: {
       get: () => Promise.resolve({}),
@@ -151,4 +164,5 @@ function getApi(): ElectronAPI {
   };
 }
 
+// 导出全局唯一的 API 实例
 export const api = getApi();

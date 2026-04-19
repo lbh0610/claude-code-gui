@@ -1,7 +1,11 @@
+// 引入状态管理和副作用钩子
 import { useState, useEffect } from 'react';
+// 引入 API 实例
 import { api } from '../lib/api';
 
+// 顶部栏组件：Logo、搜索框、版本信息
 export default function TopBar() {
+  // 搜索框输入状态
   const [search, setSearch] = useState('');
 
   return (
@@ -51,9 +55,11 @@ export default function TopBar() {
   );
 }
 
+// 版本徽标组件：从 API 获取当前版本号
 function VersionBadge() {
   const [version, setVersion] = useState('0.1.0');
 
+  // 组件挂载时获取版本号
   useEffect(() => {
     api.app.getVersion().then((v) => setVersion(v)).catch(() => {});
   });

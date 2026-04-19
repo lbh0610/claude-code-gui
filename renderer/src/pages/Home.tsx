@@ -1,46 +1,65 @@
+// 引入状态管理和副作用钩子
 import { useState, useEffect, useCallback } from 'react';
+// 引入路由导航钩子
 import { useNavigate } from 'react-router-dom';
+// 引入 API 实例
 import { api } from '../lib/api';
+// 引入状态卡片组件
 import StatusCard from '../components/StatusCard';
 
+// 最近会话数据接口
 interface RecentSession {
-  id: string;
-  name: string;
-  project_dir: string;
-  status: string;
-  created_at: string;
-  msgCount: number;
+  id: string;           // 会话 ID
+  name: string;         // 会话名称
+  project_dir: string;  // 项目目录
+  status: string;       // 会话状态
+  created_at: string;   // 创建时间
+  msgCount: number;     // 消息数量
 }
 
 export default function Home() {
+  // 路由导航函数
   const navigate = useNavigate();
+  // CLI 运行状态
   const [cliStatus, setCliStatus] = useState<'idle' | 'running' | 'error'>('idle');
+  // CLI 进程 PID
   const [cliPid, setCliPid] = useState<number | null>(null);
+  // 最近会话列表
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>([]);
+  // 今日统计数据
   const [todayStats, setTodayStats] = useState({ count: 0, tokens: 0, cost: 0 });
+  // Cmd+K 快速跳转面板显隐
   const [showCmdK, setShowCmdK] = useState(false);
+  // Cmd+K 搜索输入
   const [cmdInput, setCmdInput] = useState('');
+  // 全部会话列表（用于搜索）
   const [allSessions, setAllSessions] = useState<{ id: string; name: string }[]>([]);
 
+  // 挂载时：监听 CLI 状态变化
   useEffect(() => {
+    // 获取初始 CLI 状态
     api.cli.status().then((s: { status: string; pid: number | null; sessionCount: number }) => {
       setCliStatus(s.status === 'running' ? 'running' : 'idle');
       setCliPid(s.pid);
     }).catch(() => {});
 
+    // 订阅 CLI 状态变化事件
     const unsub = api.cli.onStatus((data: { status: string; pid: number | null }) => {
       setCliStatus(data.status === 'running' ? 'running' : data.status === 'error' ? 'error' : 'idle');
       setCliPid(data.pid);
     });
+    // 组件卸载时取消订阅
     return unsub;
   }, []);
 
+  // 挂载时：加载最近会话、今日统计、全部会话
   useEffect(() => {
     loadRecent();
     loadTodayStats();
     loadAllSessions();
   }, []);
 
+  // 加载最近 5 条会话及其消息数量
   const loadRecent = async () => {
     try {
       const sessions = await api.session.list() as { id: string; name: string; project_dir: string; status: string; created_at: string }[];
@@ -51,16 +70,19 @@ export default function Home() {
         withCount.push({ ...s, msgCount: msgs?.length || 0 });
       }
       setRecentSessions(withCount);
-    } catch { /* ignore */ }
+    } catch { /* 忽略错误 */ }
   };
 
+  // 加载今日使用统计
   const loadTodayStats = async () => {
     try {
       const sessions = await api.session.list() as { id: string }[];
+      // 获取今天的日期字符串
       const today = new Date().toDateString();
       let count = 0, tokens = 0, cost = 0;
       for (const s of sessions) {
         const msgs = await api.session.messages.load(s.id) as { role: string; timestamp: number; input_tokens?: number; output_tokens?: number; cost?: number }[];
+        // 筛选今天的非系统消息
         const todayMsgs = (msgs || []).filter(m => new Date(m.timestamp).toDateString() === today && m.role !== 'system');
         for (const m of todayMsgs) {
           if (m.role === 'assistant') count++;
@@ -69,24 +91,28 @@ export default function Home() {
         }
       }
       setTodayStats({ count, tokens, cost });
-    } catch { /* ignore */ }
+    } catch { /* 忽略错误 */ }
   };
 
+  // 加载全部会话（用于 Cmd+K 搜索）
   const loadAllSessions = async () => {
     try {
       const sessions = await api.session.list() as { id: string; name: string }[];
       setAllSessions(sessions);
-    } catch { /* ignore */ }
+    } catch { /* 忽略错误 */ }
   };
 
+  // 选中会话后跳转到工作区
   const handleSelectSession = useCallback(async (sid: string) => {
     navigate('/workspace', { state: { sessionId: sid } });
   }, [navigate]);
 
+  // 根据输入过滤会话
   const filteredSessions = cmdInput
     ? allSessions.filter(s => s.name.toLowerCase().includes(cmdInput.toLowerCase()))
     : [];
 
+  // 监听键盘快捷键：Cmd+K 打开快速跳转，Esc 关闭
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -274,6 +300,7 @@ export default function Home() {
   );
 }
 
+// 快捷操作卡片子组件
 function QuickAction({ icon, title, desc, onClick }: {
   icon: string; title: string; desc: string; onClick: () => void;
 }) {

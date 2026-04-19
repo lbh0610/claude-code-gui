@@ -1,5 +1,7 @@
+// 引入路由链接组件，用于页面导航
 import { NavLink } from 'react-router-dom';
 
+// 导航项配置：路径、图标、标签
 const NAV_ITEMS = [
   { path: '/', icon: '⌂', label: '首页' },
   { path: '/workspace', icon: '◫', label: '项目工作区' },
@@ -10,6 +12,7 @@ const NAV_ITEMS = [
   { path: '/plugins', icon: '⊞', label: '系统诊断' },
 ];
 
+// 侧边栏组件：渲染导航菜单
 export default function Sidebar() {
   return (
     <nav style={{

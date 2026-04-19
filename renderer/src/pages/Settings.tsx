@@ -1,6 +1,9 @@
+// 引入状态管理和副作用钩子
 import { useState, useEffect } from 'react';
+// 引入 API 实例
 import { api } from '../lib/api';
 
+// 设置菜单项配置
 const SETTINGS_SECTIONS = [
   { id: 'general', label: '通用' },
   { id: 'systemPrompt', label: '系统提示词' },
@@ -11,28 +14,37 @@ const SETTINGS_SECTIONS = [
 ];
 
 export default function Settings() {
+  // 当前激活的设置面板 ID
   const [activeSection, setActiveSection] = useState('account');
+  // 配置数据对象
   const [config, setConfig] = useState<Record<string, unknown>>({});
+  // API Key 输入框值
   const [apiKeyInput, setApiKeyInput] = useState('');
+  // 连接测试结果
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  // 保存中状态
   const [saving, setSaving] = useState(false);
 
+  // 挂载时加载配置
   useEffect(() => {
     api.config.get().then(cfg => {
       setConfig(cfg);
+      // 从脱敏显示值初始化输入框
       const display = cfg.apiKeyDisplay as string | undefined;
       setApiKeyInput(display || '');
+      // 同步主题设置
       if (cfg.theme && typeof cfg.theme === 'string') {
         onThemeChange?.(cfg.theme);
       }
     }).catch(() => {});
   }, []);
 
+  // 保存配置到后端
   const handleSave = async () => {
     setSaving(true);
     try {
       const toSave = { ...config };
-      // 只在用户输入了新 key 时才更新
+      // 只在用户输入了新 Key（非脱敏值）时才更新
       if (apiKeyInput && !apiKeyInput.startsWith('****') && apiKeyInput !== config.apiKeyDisplay) {
         toSave.apiKey = apiKeyInput;
       }
@@ -42,6 +54,7 @@ export default function Settings() {
     }
   };
 
+  // 测试 API 连接
   const handleTest = async () => {
     setTestResult(null);
     const result = await api.config.testConnection(config);
@@ -81,6 +94,7 @@ export default function Settings() {
           {SETTINGS_SECTIONS.find((s) => s.id === activeSection)?.label}
         </h2>
 
+        {/* API Key 设置 */}
         {activeSection === 'account' && (
           <div style={{ maxWidth: 500 }}>
             <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>
@@ -124,6 +138,7 @@ export default function Settings() {
           </div>
         )}
 
+        {/* 模型与网关 */}
         {activeSection === 'gateway' && (
           <div style={{ maxWidth: 500 }}>
             <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>
@@ -154,6 +169,7 @@ export default function Settings() {
           </div>
         )}
 
+        {/* 代理设置 */}
         {activeSection === 'proxy' && (
           <div style={{ maxWidth: 500 }}>
             <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>
@@ -172,6 +188,7 @@ export default function Settings() {
           </div>
         )}
 
+        {/* 更新设置 */}
         {activeSection === 'update' && (
           <div style={{ maxWidth: 500 }}>
             <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -188,6 +205,7 @@ export default function Settings() {
           </div>
         )}
 
+        {/* 通用设置 */}
         {activeSection === 'general' && (
           <div style={{ maxWidth: 500 }}>
             <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>
@@ -203,6 +221,7 @@ export default function Settings() {
 
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>配置导入/导出</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {/* 导出配置：生成 Blob 并触发下载 */}
               <button className="btn btn-secondary btn-sm" onClick={async () => {
                 const data = await api.config.export();
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -211,6 +230,7 @@ export default function Settings() {
                 a.download = `config-${new Date().toISOString().slice(0, 10)}.json`;
                 a.click();
               }}>导出配置</button>
+              {/* 导入配置：创建隐藏文件选择器 */}
               <button className="btn btn-secondary btn-sm" onClick={async () => {
                 const input = document.createElement('input');
                 input.type = 'file';
@@ -233,6 +253,7 @@ export default function Settings() {
           </div>
         )}
 
+        {/* 系统提示词 */}
         {activeSection === 'systemPrompt' && (
           <div style={{ maxWidth: 500 }}>
             <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>

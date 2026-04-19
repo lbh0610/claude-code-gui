@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 
+// 系统诊断信息的数据结构定义
 interface DiagInfo {
   system: {
     platform: string; arch: string; hostname: string; nodeVersion: string;
@@ -25,46 +26,55 @@ interface DiagInfo {
     status: string; pid: number | null; sessionCount: number;
     cliPath: string; cliExists: boolean;
   };
-  timestamp: string;
+  timestamp: string; // 诊断数据生成时间
 }
 
+// Plugins 页面主组件：系统诊断中心
 export default function Plugins() {
+  // 诊断数据
   const [diag, setDiag] = useState<DiagInfo | null>(null);
+  // 加载状态
   const [loading, setLoading] = useState(true);
+  // 操作结果提示消息
   const [actionResult, setActionResult] = useState<string | null>(null);
 
+  // 组件挂载时加载诊断数据
   useEffect(() => { loadDiag(); }, []);
 
+  // 从 API 获取系统诊断信息
   const loadDiag = async () => {
     setLoading(true);
     try {
       const data = await api.diagnostic.get() as DiagInfo;
       setDiag(data);
-    } catch { /* ignore */ }
+    } catch { /* 忽略错误，静默处理 */ }
     setLoading(false);
   };
 
+  // 清除日志的处理函数
   const handleClearLogs = async () => {
     try {
       await api.log.clear();
       setActionResult('日志已清除');
-      loadDiag();
-      setTimeout(() => setActionResult(null), 3000);
-    } catch { /* ignore */ }
+      loadDiag();                            // 刷新诊断数据
+      setTimeout(() => setActionResult(null), 3000); // 3秒后隐藏提示
+    } catch { /* 忽略错误 */ }
   };
 
+  // 测试 API 连接的处理函数
   const handleTestConnection = async () => {
     try {
       const config = await api.config.get() as Record<string, unknown>;
       const result = await api.config.testConnection(config) as { ok: boolean; msg: string };
       setActionResult(result.msg);
-      setTimeout(() => setActionResult(null), 5000);
+      setTimeout(() => setActionResult(null), 5000); // 5秒后隐藏提示
     } catch (e: unknown) {
       setActionResult(e instanceof Error ? e.message : '测试失败');
       setTimeout(() => setActionResult(null), 5000);
     }
   };
 
+  // 加载中状态：居中显示"正在收集诊断信息..."
   if (loading) {
     return (
       <div style={{ padding: 24, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -73,6 +83,7 @@ export default function Plugins() {
     );
   }
 
+  // 数据为空时的错误状态
   if (!diag) {
     return (
       <div style={{ padding: 24, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -81,6 +92,7 @@ export default function Plugins() {
     );
   }
 
+  // 主渲染：渲染各诊断卡片
   return (
     <div style={{ padding: 24, overflow: 'auto', height: '100%' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 20, color: 'var(--cyan)' }}>
@@ -98,7 +110,7 @@ export default function Plugins() {
       </div>
 
       <div style={{ display: 'grid', gap: 20 }}>
-        {/* 系统信息 */}
+        {/* 系统信息卡片 */}
         <DiagCard title="系统环境" icon="◈" color="var(--cyan)">
           <DiagRow label="操作系统" value={diag.system.platform} />
           <DiagRow label="架构" value={diag.system.arch} />
@@ -109,7 +121,7 @@ export default function Plugins() {
           <DiagRow label="应用运行时间" value={diag.system.uptime} />
         </DiagCard>
 
-        {/* 配置状态 */}
+        {/* 配置状态卡片 */}
         <DiagCard title="配置状态" icon="⚙" color="var(--purple)">
           <DiagRow label="配置文件" value={diag.config.fileExists ? '已加载' : '不存在'} status={diag.config.fileExists ? 'ok' : 'warn'} />
           <DiagRow label="API Key" value={diag.config.apiKey} status={diag.config.configured ? 'ok' : 'error'} />
@@ -120,7 +132,7 @@ export default function Plugins() {
           <DiagRow label="自定义环境变量" value={`${diag.config.envVars} 项`} />
         </DiagCard>
 
-        {/* 数据库统计 */}
+        {/* 数据库统计卡片 */}
         <DiagCard title="数据库" icon="▦" color="var(--success)">
           <DiagRow label="数据库大小" value={diag.db.dbSize} />
           <DiagRow label="路径" value={diag.db.dbPath} mono />
@@ -130,7 +142,7 @@ export default function Plugins() {
           <DiagRow label="Skills" value={diag.db.skills} />
         </DiagCard>
 
-        {/* CLI 状态 */}
+        {/* CLI 引擎状态卡片 */}
         <DiagCard title="CLI 引擎" icon="⚡" color="var(--warn)">
           <DiagRow
             label="状态"
@@ -147,7 +159,7 @@ export default function Plugins() {
           />
         </DiagCard>
 
-        {/* 存储用量 */}
+        {/* 存储用量卡片 */}
         <DiagCard title="存储用量" icon="▤" color="var(--text-secondary)">
           <DiagRow label="数据目录" value={diag.disk.appDir} mono />
           <DiagRow label="目录总大小" value={diag.disk.appDirSize} />
@@ -160,6 +172,7 @@ export default function Plugins() {
   );
 }
 
+// 字节数格式化函数：将字节转换为人类可读的单位（B/KB/MB/GB）
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -167,6 +180,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+// DiagCard 子组件：诊断信息卡片容器，带标题、图标和主题色
 function DiagCard({ title, icon, color, children }: {
   title: string; icon: string; color: string; children: React.ReactNode;
 }) {
@@ -183,9 +197,11 @@ function DiagCard({ title, icon, color, children }: {
   );
 }
 
+// DiagRow 子组件：诊断信息的单行键值对，支持状态颜色（ok/warn/error）和等宽字体选项
 function DiagRow({ label, value, status, mono }: {
   label: string; value: string | number; status?: 'ok' | 'warn' | 'error'; mono?: boolean;
 }) {
+  // 根据状态值映射到对应的 CSS 变量颜色
   const statusColor = status === 'ok' ? 'var(--success)' : status === 'warn' ? 'var(--warn)' : status === 'error' ? 'var(--danger)' : undefined;
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>

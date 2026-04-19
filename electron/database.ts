@@ -5,10 +5,10 @@ import { DB_PATH } from './config';
 
 let db: Database.Database | null = null;
 
+// 获取或创建 SQLite 数据库实例（单例模式），自动初始化表结构和迁移
 export function getDb(): Database.Database {
   if (db) return db;
 
-  // 确保数据库目录存在
   const dbDir = path.dirname(DB_PATH);
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
@@ -18,7 +18,6 @@ export function getDb(): Database.Database {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
-  // 执行 schema.sql 建表
   const schemaPath = path.join(
     process.env.NODE_ENV === 'development'
       ? path.join(__dirname, '..', '..', 'database', 'schema.sql')
@@ -30,7 +29,6 @@ export function getDb(): Database.Database {
     db.exec(schema);
   }
 
-  // 迁移：为已存在的旧表添加缺失的列
   try { db.prepare('ALTER TABLE messages ADD COLUMN thinking TEXT').run(); } catch {}
   try { db.prepare('ALTER TABLE messages ADD COLUMN tool_steps TEXT').run(); } catch {}
   try { db.prepare('ALTER TABLE messages ADD COLUMN cost REAL').run(); } catch {}
@@ -45,6 +43,7 @@ export function getDb(): Database.Database {
   return db;
 }
 
+// 关闭数据库连接并释放资源
 export function closeDb(): void {
   if (db) {
     db.close();

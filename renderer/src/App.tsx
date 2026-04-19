@@ -1,8 +1,13 @@
+// 引入 React 状态管理和副作用钩子
 import { useState, useEffect } from 'react';
+// 引入路由：HashRouter 用于无服务器的路由，Routes/Route 定义路由规则
 import { HashRouter, Routes, Route } from 'react-router-dom';
+// 引入 React Query 客户端，用于数据缓存和异步状态管理
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// 引入布局组件
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
+// 引入所有页面组件
 import Home from './pages/Home';
 import Workspace from './pages/Workspace';
 import Sessions from './pages/Sessions';
@@ -11,20 +16,24 @@ import Logs from './pages/Logs';
 import Plugins from './pages/Plugins';
 import Updates from './pages/Updates';
 import Skills from './pages/Skills';
+// 引入 API 实例
 import { api } from './lib/api';
 
+// 创建 React Query 客户端实例，用于全局数据缓存
 const queryClient = new QueryClient();
 
 export default function App() {
+  // 主题状态，初始化时优先读取 localStorage
   const [theme, setTheme] = useState(() => {
     const stored = localStorage.getItem('theme');
     return stored || 'light';
   });
 
+  // 组件挂载时：同步 localStorage 和配置中的主题
   useEffect(() => {
     localStorage.setItem('theme', theme);
     document.documentElement.setAttribute('data-theme', theme);
-    // 加载主题时也从配置读取
+    // 从后端配置中读取主题设置
     api.config.get().then(cfg => {
       if (cfg.theme && typeof cfg.theme === 'string') {
         setTheme(cfg.theme);
@@ -32,6 +41,7 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
+  // 主题变化时更新 DOM 属性
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);

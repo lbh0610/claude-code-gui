@@ -6,7 +6,7 @@
   "proxy": "",
   "autoStartVideo": true,
   "autoCheckUpdate": true,
-  "theme": "dark",
+  "theme": "light",
   "envVariables": {},
   "pluginWhitelist": [],
   "enterpriseMode": false

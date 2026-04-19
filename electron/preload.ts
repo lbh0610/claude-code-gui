@@ -1,12 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-/**
- * Context Bridge：安全边界，暴露主进程 API 给渲染进程
- * 不暴露 require/process，所有通信通过命名 IPC 通道
- */
+// 通过 contextBridge 安全暴露主进程 API 给渲染进程，所有通信均通过命名 IPC 通道
 
+// 配置管理 API：获取、保存、测试连接、导入导出配置文件
 const electronAPI = {
-  // 配置管理
   config: {
     get: () => ipcRenderer.invoke('config:get'),
     save: (config: Record<string, unknown>) => ipcRenderer.invoke('config:save', config),
@@ -15,36 +12,38 @@ const electronAPI = {
     import: (filePath: string) => ipcRenderer.invoke('config:import', filePath),
   },
 
-  // CLI 进程管理
+  // CLI 进程管理 API：启动、停止、发送输入、查询状态及订阅各类事件
   cli: {
     start: (sessionId: string, projectDir: string, config: Record<string, unknown>) =>
       ipcRenderer.invoke('cli:start', { sessionId, projectDir, config }),
     stop: (sessionId: string) => ipcRenderer.invoke('cli:stop', sessionId),
     input: (sessionId: string, input: string) => ipcRenderer.invoke('cli:input', { sessionId, input }),
     status: () => ipcRenderer.invoke('cli:status'),
-    // 事件订阅
+    // 监听 CLI 输出事件（标准输出/标准错误），回调函数接收会话 ID、输出类型和文本内容
     onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => void) => {
       const handler = (_: unknown, data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => cb(data);
       ipcRenderer.on('cli-output', handler);
       return () => ipcRenderer.removeListener('cli-output', handler);
     },
-    // 流式更新（思考过程 + 工具调用实时推送）
+    // 监听流式更新事件（思考过程和工具调用实时推送），回调函数接收会话 ID、思考内容、文本和工具步骤
     onStream: (cb: (data: { sessionId: string; thinking?: string; text?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => void) => {
       const handler = (_: unknown, data: { sessionId: string; thinking?: string; text?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => cb(data);
       ipcRenderer.on('cli-stream', handler);
       return () => ipcRenderer.removeListener('cli-stream', handler);
     },
+    // 监听 CLI 退出事件，回调函数接收会话 ID、退出码和信号
     onExit: (cb: (data: { sessionId: string; code: number; signal: string }) => void) => {
       const handler = (_: unknown, data: { sessionId: string; code: number; signal: string }) => cb(data);
       ipcRenderer.on('cli-exit', handler);
       return () => ipcRenderer.removeListener('cli-exit', handler);
     },
+    // 监听 CLI 状态变化事件，回调函数接收当前状态和进程 ID
     onStatus: (cb: (data: { status: string; pid: number | null }) => void) => {
       const handler = (_: unknown, data: { status: string; pid: number | null }) => cb(data);
       ipcRenderer.on('cli-status', handler);
       return () => ipcRenderer.removeListener('cli-status', handler);
     },
-    // 任务执行流（所有 CLI 事件）
+    // 监听任务执行事件（所有 CLI 事件流），回调函数接收会话 ID、事件类型、子类型、时间戳、摘要和原始数据
     onTask: (cb: (data: { sessionId: string; type: string; subtype: string; timestamp: number; summary: string; raw: string }) => void) => {
       const handler = (_: unknown, data: { sessionId: string; type: string; subtype: string; timestamp: number; summary: string; raw: string }) => cb(data);
       ipcRenderer.on('cli-task', handler);
@@ -52,7 +51,7 @@ const electronAPI = {
     },
   },
 
-  // 会话管理
+  // 会话管理 API：列表查询、创建、删除、重命名、自动标题、标签更新及消息读写
   session: {
     list: (projectId?: string, tag?: string) => ipcRenderer.invoke('session:list', { projectId, tag }),
     create: (data: { projectId?: string; projectDir: string; name: string }) =>
@@ -69,7 +68,7 @@ const electronAPI = {
     },
   },
 
-  // 日志管理
+  // 日志管理 API：列表查询、导出、诊断报告、删除和清空
   log: {
     list: (filter?: { level?: string; component?: string; sessionId?: string; limit?: number }) =>
       ipcRenderer.invoke('log:list', filter),
@@ -79,20 +78,20 @@ const electronAPI = {
     clear: () => ipcRenderer.invoke('log:clear'),
   },
 
-  // 插件管理
+  // 插件管理 API：查询插件列表和切换插件启用状态
   plugin: {
     list: () => ipcRenderer.invoke('plugin:list'),
     toggle: (id: string, enabled: boolean) => ipcRenderer.invoke('plugin:toggle', { id, enabled }),
   },
 
-  // 更新管理
+  // 更新管理 API：检查更新、导入补丁、查询当前版本信息
   update: {
     check: () => ipcRenderer.invoke('update:check'),
     importPatch: (filePath: string) => ipcRenderer.invoke('update:importPatch', { filePath }),
     info: () => ipcRenderer.invoke('update:info'),
   },
 
-  // Skills 管理
+  // Skills 管理 API：查询、创建、更新、删除和切换技能启用状态
   skill: {
     list: () => ipcRenderer.invoke('skill:list'),
     get: (id: string) => ipcRenderer.invoke('skill:get', id),
@@ -102,19 +101,19 @@ const electronAPI = {
     toggle: (id: string, enabled: boolean) => ipcRenderer.invoke('skill:toggle', { id, enabled }),
   },
 
-  // 文件系统
+  // 文件系统 API：选择目录和读取文件内容
   fs: {
     selectDirectory: () => ipcRenderer.invoke('fs:selectDirectory'),
     readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
   },
 
-  // 应用信息
+  // 应用信息 API：获取应用版本号和运行平台
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
   },
 
-  // 系统诊断
+  // 系统诊断 API：获取系统诊断信息
   diagnostic: {
     get: () => ipcRenderer.invoke('diagnostic:get'),
   },
@@ -122,5 +121,5 @@ const electronAPI = {
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
-// 类型声明供 renderer 使用
+// 导出类型声明供渲染进程使用
 export type ElectronAPI = typeof electronAPI;

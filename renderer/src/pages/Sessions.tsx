@@ -1,36 +1,50 @@
+// 引入状态管理和副作用钩子
 import { useState, useEffect } from 'react';
+// 引入 API 实例
 import { api } from '../lib/api';
 
+// 会话数据接口
 interface Session {
-  id: string;
-  name: string;
-  project_dir: string;
-  tags: string;
-  status: string;
-  created_at: string;
-  summary: string | null;
+  id: string;           // 会话唯一标识
+  name: string;         // 会话名称
+  project_dir: string;  // 项目目录路径
+  tags: string;         // 标签数组的 JSON 字符串
+  status: string;       // 会话状态
+  created_at: string;   // 创建时间
+  summary: string | null;  // 会话摘要
 }
 
 export default function Sessions() {
+  // 会话列表
   const [sessions, setSessions] = useState<Session[]>([]);
+  // 搜索关键词
   const [search, setSearch] = useState('');
+  // 按项目过滤
   const [filterProject, setFilterProject] = useState('');
+  // 按标签过滤
   const [filterTag, setFilterTag] = useState('');
+  // 批量选中的会话 ID 集合
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // 标签编辑状态（哪个会话正在编辑标签）
   const [editingTags, setEditingTags] = useState<Record<string, boolean>>({});
+  // 标签编辑输入框的值
   const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
 
+  // 挂载时加载会话列表
   useEffect(() => { loadSessions(); }, []);
 
+  // 从 API 加载会话列表
   const loadSessions = async () => {
     const data = await api.session.list();
     setSessions(data as Session[]);
   };
 
+  // 提取所有会话中出现的唯一标签集合
   const allTags = [...new Set(sessions.flatMap(s => {
     try { return JSON.parse(s.tags || '[]') as string[]; } catch { return []; }
   }))];
 
+  // 根据搜索、项目、标签过滤会话
   const filtered = sessions.filter((s) => {
     const tags: string[] = (() => { try { return JSON.parse(s.tags || '[]'); } catch { return []; } })();
     const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.project_dir.toLowerCase().includes(search.toLowerCase());
@@ -39,6 +53,7 @@ export default function Sessions() {
     return matchSearch && matchProject && matchTag;
   });
 
+  // 批量删除选中的会话
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
     if (!confirm(`确定删除选中的 ${selectedIds.size} 个会话？`)) return;
@@ -47,6 +62,7 @@ export default function Sessions() {
     await loadSessions();
   };
 
+  // 保存标签：解析逗号分隔的标签字符串，调用 API 更新
   const handleSaveTags = async (id: string) => {
     const raw = tagInputs[id] || '';
     const tags = raw.split(',').map(t => t.trim()).filter(Boolean);
@@ -55,14 +71,17 @@ export default function Sessions() {
     await loadSessions();
   };
 
+  // 解析会话的标签数组
   const getTags = (s: Session): string[] => {
     try { return JSON.parse(s.tags || '[]'); } catch { return []; }
   };
 
+  // 切换单个会话的选中状态
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   };
 
+  // 全选/取消全选
   const toggleSelectAll = () => {
     setSelectedIds(selectedIds.size === filtered.length ? new Set() : new Set(filtered.map(s => s.id)));
   };
@@ -101,7 +120,7 @@ export default function Sessions() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* 表头 */}
+          {/* 全选表头 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', fontSize: 11, color: 'var(--text-dim)' }}>
             <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0}
               onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
@@ -117,7 +136,7 @@ export default function Sessions() {
                 <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
                   {s.project_dir}
                 </div>
-                {/* 标签 */}
+                {/* 标签显示与编辑 */}
                 <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                   {editingTags[s.id] ? (
                     <>

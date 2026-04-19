@@ -1,37 +1,47 @@
+// 引入状态管理和副作用钩子
 import { useState, useEffect } from 'react';
+// 引入 API 实例
 import { api } from '../lib/api';
 
+// 版本信息接口
 interface VersionInfo {
-  currentVersion: string;
-  appName: string;
-  platform: string;
-  arch: string;
+  currentVersion: string;  // 当前版本号
+  appName: string;         // 应用名称
+  platform: string;        // 操作系统平台
+  arch: string;            // CPU 架构
 }
 
+// 更新信息接口
 interface UpdateInfo {
-  available: boolean;
-  latestVersion: string;
-  releaseNotes: string;
+  available: boolean;      // 是否有可用更新
+  latestVersion: string;   // 最新版本号
+  releaseNotes: string;    // 更新说明
 }
 
+// 更新记录接口
 interface UpdateRecord {
   id: number;
-  from_version: string | null;
-  to_version: string | null;
-  status: string | null;
-  applied_at: string;
-  method: string | null;
+  from_version: string | null;  // 起始版本
+  to_version: string | null;    // 目标版本
+  status: string | null;        // 更新状态
+  applied_at: string;           // 应用时间
+  method: string | null;        // 更新方式
 }
 
 export default function Updates() {
+  // 当前版本信息
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  // 在线更新信息
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  // 检查更新中状态
   const [checking, setChecking] = useState(false);
 
+  // 挂载时获取版本信息
   useEffect(() => {
     api.update.info().then((info) => setVersionInfo(info as VersionInfo)).catch(() => {});
   }, []);
 
+  // 检查在线更新
   const handleCheckUpdate = async () => {
     setChecking(true);
     try {
@@ -42,6 +52,7 @@ export default function Updates() {
     }
   };
 
+  // 导入离线补丁
   const handleImportPatch = async () => {
     // 在 Electron 中应使用 dialog.showOpenDialog，这里简化处理
     alert('请选择离线补丁文件（.json）\n\n此功能需要在 Electron 环境中使用文件选择对话框');
