@@ -15,8 +15,11 @@
     "build": "npm run build:renderer && npm run build:electron",
     "dev": "cross-env NODE_ENV=development concurrently \"npm run dev:renderer\" \"sleep 2 && npx electron .\"",
     "start": "cross-env NODE_ENV=development npx electron .",
-    "package": "electron-builder",
-    "package:mac": "electron-builder --mac --arm64"
+    "package": "npm run build && electron-builder",
+    "package:mac": "npm run build && electron-builder --mac --arm64",
+    "package:mac:all": "npm run build && electron-builder --mac --arm64 --x64",
+    "package:win": "npm run build && electron-builder --win --x64",
+    "package:all": "npm run build && electron-builder --mac --win"
   },
   "devDependencies": {
     "better-sqlite3": "^12.9.0",

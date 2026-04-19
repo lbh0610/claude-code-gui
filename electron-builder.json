@@ -11,12 +11,23 @@
     "config/default.json"
   ],
   "mac": {
-    "target": { "target": "dmg", "arch": ["arm64"] },
+    "target": { "target": "dmg", "arch": ["arm64", "x64"] },
     "category": "public.app-category.developer-tools",
     "hardenedRuntime": true,
     "gatekeeperAssess": false,
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.plist"
+  },
+  "win": {
+    "target": { "target": "nsis", "arch": ["x64"] },
+    "icon": "build/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "perMachine": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
   },
   "extraResources": [
     { "from": "native-bin/", "to": "native-bin/", "filter": ["**/*"] }

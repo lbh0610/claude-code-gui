@@ -125,7 +125,7 @@ update_history ── 更新记录 (from_version, to_version, status, method)
 | State | @tanstack/react-query + React useState/useRef |
 | Database | better-sqlite3 |
 | Encryption | Node.js crypto (AES-256-GCM) |
-| Build | electron-builder (macOS DMG, ARM64) |
+| Build | electron-builder (macOS DMG arm64/x64, Windows NSIS x64) |
 
 ---
 
@@ -165,14 +165,75 @@ npm start
 npm run build
 ```
 
-### Package / 打包
+### Build / 构建
 
 ```bash
-# 打包 macOS DMG (ARM64)
+# 构建 renderer + 编译 Electron 主进程
+npm run build
+```
+
+### Package / 打包
+
+产物统一输出至 `release/` 目录。
+
+#### macOS DMG 安装包（Apple Silicon）
+
+```bash
 npm run package:mac
 ```
 
-产物输出至 `release/` 目录。
+输出：`release/Agent Workbench-0.1.0-arm64.dmg`
+
+#### macOS DMG 安装包（Intel）
+
+```bash
+npm run package:mac
+# 修改 electron-builder.json 中 mac.target.arch 为 ["x64"] 即可
+```
+
+输出：`release/Agent Workbench-0.1.0-x64.dmg`
+
+#### Windows NSIS 安装包
+
+```bash
+npm run package:win
+```
+
+输出：`release/Agent Workbench Setup 0.1.0.exe`
+
+> **注意**：Windows 打包需在 Windows 环境或配置好 wine 的 macOS 上执行。推荐直接在 Windows 机器上操作。
+
+#### 同时打包 macOS + Windows
+
+```bash
+npm run package:all
+```
+
+#### 打包步骤详解
+
+```bash
+# 1. 安装依赖（首次操作或 package.json 变更时）
+npm install
+
+# 2. 构建产物（renderer 前端 + electron 主进程编译）
+npm run build
+
+# 3a. 打包 macOS DMG
+npm run package:mac
+
+# 3b. 打包 Windows 安装包
+npm run package:win
+
+# 4. 检查输出
+ls release/
+```
+
+#### 打包注意事项
+
+- **better-sqlite3** 等原生模块需针对目标平台重新编译，跨平台打包建议在对应平台上执行
+- **node-pty** 依赖 Python 和 C++ 编译工具链，macOS 需安装 Xcode Command Line Tools，Windows 需安装 Visual Studio Build Tools
+- 如需代码签名，在 `electron-builder.json` 中添加 `mac.identity` / `win.signAndEditFiles` 配置
+- 如不携带 native-bin，删除 `extraResources` 配置即可
 
 ---
 
