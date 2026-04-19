@@ -15,7 +15,7 @@ export interface ElectronAPI {
     stop: (sessionId: string) => Promise<void>;
     input: (sessionId: string, input: string) => Promise<void>;
     status: () => Promise<{ status: string; pid: number | null; sessionCount: number }>;
-    onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; role?: 'user' | 'assistant' | 'system'; msgId?: string }) => void) => () => void;
+    onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[]; role?: 'user' | 'assistant' | 'system'; msgId?: string }) => void) => () => void;
     onExit: (cb: (data: { sessionId: string; code: number; signal: string }) => void) => () => void;
     onStatus: (cb: (data: { status: string; pid: number | null }) => void) => () => void;
   };

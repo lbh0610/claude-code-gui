@@ -64,6 +64,8 @@ export default function Workspace() {
       const msg: ChatMessage = {
         role: data.role || (data.type === 'stderr' ? 'system' : 'assistant'),
         content: data.text,
+        thinking: data.thinking,
+        toolSteps: data.toolSteps,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev.slice(-500), msg]);

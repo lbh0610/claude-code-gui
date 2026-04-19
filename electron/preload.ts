@@ -21,8 +21,8 @@ const electronAPI = {
     input: (sessionId: string, input: string) => ipcRenderer.invoke('cli:input', { sessionId, input }),
     status: () => ipcRenderer.invoke('cli:status'),
     // 事件订阅
-    onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string }) => void) => {
-      const handler = (_: unknown, data: { sessionId: string; type: 'stdout' | 'stderr'; text: string }) => cb(data);
+    onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => void) => {
+      const handler = (_: unknown, data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => cb(data);
       ipcRenderer.on('cli-output', handler);
       return () => ipcRenderer.removeListener('cli-output', handler);
     },

@@ -93,6 +93,8 @@ export async function startSession(
     // 捕获 stdout（解析 stream-json，按角色发送）
     let buffer = '';
     let assistantTurnText = '';
+    let assistantTurnThinking = '';
+    let toolSteps: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] = [];
 
     child.stdout?.on('data', (data: Buffer) => {
       buffer += data.toString('utf-8');
@@ -106,21 +108,46 @@ export async function startSession(
             for (const part of msg.message.content) {
               if (part.type === 'text') {
                 assistantTurnText += part.text;
+              } else if (part.type === 'thinking') {
+                assistantTurnThinking += part.thinking || '';
+              } else if (part.type === 'tool_use') {
+                // 捕获工具调用（Bash 命令、文件编辑等）
+                const toolName = part.name || part.tool_name || 'unknown';
+                const toolInput = part.input || {};
+                toolSteps.push({ name: toolName, input: toolInput, status: 'running' });
+                // 把工具调用也加入思考过程文本
+                if (toolName === 'Bash' && typeof toolInput.command === 'string') {
+                  assistantTurnThinking += `\n\n**执行命令:**\n\`\`\`bash\n${toolInput.command}\n\`\`\`\n`;
+                } else {
+                  assistantTurnThinking += `\n\n**调用工具 ${toolName}:** ${JSON.stringify(toolInput).slice(0, 100)}\n`;
+                }
+              } else if (part.type === 'tool_result') {
+                // 捕获工具执行结果
+                const lastStep = toolSteps[toolSteps.length - 1];
+                if (lastStep) {
+                  lastStep.status = 'done';
+                  lastStep.output = typeof part.content === 'string' ? part.content.slice(0, 200) : '';
+                  assistantTurnThinking += lastStep.output ? `\n**结果:** \`${lastStep.output}\`\n` : '\n**完成**\n';
+                }
               }
             }
           }
           if (msg.type === 'result') {
             // 发送累积的 assistant 回复（带唯一 ID 去重）
-            if (assistantTurnText) {
+            if (assistantTurnText || assistantTurnThinking) {
               messageCounter++;
               sendToRenderer('cli-output', {
                 sessionId,
                 type: 'stdout' as const,
                 text: assistantTurnText,
+                thinking: assistantTurnThinking || undefined,
+                toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
                 role: 'assistant' as const,
                 msgId: `${sessionId}_a_${messageCounter}`,
               });
               assistantTurnText = '';
+              assistantTurnThinking = '';
+              toolSteps = [];
             }
           }
         } catch {
