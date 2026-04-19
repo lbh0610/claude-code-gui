@@ -77,12 +77,14 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<{ ok: boolean; msg?: string }>;
     toggle: (id: string, enabled: boolean) => Promise<void>;
   };
-  // 文件系统：选择目录、读取文件、目录浏览
+  // 文件系统：选择目录、读取文件、目录浏览、图片读取、文件选择
   fs: {
     selectDirectory: () => Promise<string | null>;
     readFile: (filePath: string) => Promise<string>;
     readdir: (dirPath: string) => Promise<Array<{ name: string; isDirectory: boolean; isFile: boolean; path: string; size: number }>>;
     stat: (filePath: string) => Promise<{ isFile: boolean; isDirectory: boolean; size: number; mtime: string }>;
+    readImage: (filePath: string) => Promise<string>;
+    selectFiles: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string[]>;
   };
   // 应用信息：版本、平台
   app: {
@@ -202,6 +204,8 @@ function getApi(): ElectronAPI {
       readFile: () => Promise.resolve(''),
       readdir: () => Promise.resolve([]),
       stat: () => Promise.resolve({ isFile: true, isDirectory: false, size: 0, mtime: '' }),
+      readImage: () => Promise.resolve(''),
+      selectFiles: () => Promise.resolve([]),
     },
     app: {
       getVersion: () => Promise.resolve('0.1.0'),

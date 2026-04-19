@@ -174,6 +174,37 @@ function registerHandlers(): void {
     };
   });
 
+  // 文件系统操作：读取图片文件转 base64 data URL
+  ipcMain.handle('fs:readImage', async (_, filePath: string) => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const buffer = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mime: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+    };
+    const mimeType = mime[ext] || 'application/octet-stream';
+    return `data:${mimeType};base64,${buffer.toString('base64')}`;
+  });
+
+  // 文件系统操作：选择文件（支持图片+代码文件）
+  ipcMain.handle('fs:selectFiles', async (_, filters: Array<{ name: string; extensions: string[] }> = []) => {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile', 'multiSelections'],
+      filters: filters.length > 0 ? filters : [
+        { name: 'Images & Code', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ts', 'tsx', 'js', 'jsx', 'py', 'go', 'rs', 'java', 'rb', 'php', 'css', 'html', 'json', 'yaml', 'yml', 'md', 'sql', 'sh', 'toml'] },
+      ],
+    });
+    if (result.canceled) return [];
+    return result.filePaths;
+  });
+
   // 获取应用版本号
   ipcMain.handle('app:getVersion', () => APP_VERSION);
 

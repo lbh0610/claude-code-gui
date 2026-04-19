@@ -1,6 +1,6 @@
 // 引入 React 核心钩子：状态、副作用、回调、引用、缓存
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-// 引入 React Router 的 useLocation 钩子，用于获取路由导航状态
+// 引入 React Router 的 useLocation 钩子，用于获取路由导航信息
 import { useLocation } from 'react-router-dom';
 // 引入 API 封装，用于与后端通信
 import { api } from '../lib/api';
@@ -12,6 +12,43 @@ import FileExplorer from '../components/FileExplorer';
 import EmbeddedTerminal from '../components/EmbeddedTerminal';
 import TemplatePicker from '../components/TemplatePicker';
 import ToolsPanel from '../components/ToolsPanel';
+import ImagePreview, { AttachedImage } from '../components/ImagePreview';
+
+/** 单个会话 Tab 的完整状态 */
+interface SessionTab {
+  sessionId: string;
+  projectDir: string;
+  name: string;
+  messages: ChatMessage[];
+  isRunning: boolean;
+  streamingMsg: ChatMessage | null;
+  taskEvents: { type: string; subtype: string; summary: string; raw: string; timestamp: number }[];
+  taskMsgIds: Set<string>;
+  seenMsgIds: Set<string>;
+  isFirstUserMsg: boolean;
+  loadingMessages: boolean;
+  budgetLimit: number | null;
+  currentCost: number;
+}
+
+// 创建空的 SessionTab
+function createEmptyTab(sessionId: string, projectDir: string, name: string): SessionTab {
+  return {
+    sessionId,
+    projectDir,
+    name,
+    messages: [],
+    isRunning: false,
+    streamingMsg: null,
+    taskEvents: [],
+    taskMsgIds: new Set(),
+    seenMsgIds: new Set(),
+    isFirstUserMsg: true,
+    loadingMessages: false,
+    budgetLimit: null,
+    currentCost: 0,
+  };
+}
 
 // 导出主组件 Workspace：工作区/聊天页面
 // theme: 当前主题（dark/light）
@@ -19,42 +56,25 @@ import ToolsPanel from '../components/ToolsPanel';
 export default function Workspace({ theme, onThemeChange }: { theme?: string; onThemeChange?: (t: string) => void }) {
   // 获取当前路由位置信息，用于检测从 Home 页面导航过来的会话
   const location = useLocation();
-  // 当前项目目录路径
+  // 当前项目目录路径（用于文件浏览器）
   const [projectDir, setProjectDir] = useState<string | null>(null);
-  // 当前会话 ID
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  // CLI 进程是否正在运行
-  const [isRunning, setIsRunning] = useState(false);
-  // 聊天消息列表
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  // 用户输入框中的文本
-  const [inputText, setInputText] = useState('');
-  // 侧边栏会话列表
-  const [sessions, setSessions] = useState<{ id: string; name: string; project_dir: string }[]>([]);
+  // 当前活跃 Tab 的 sessionId
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  // Tabs Map：key=sessionId，value=SessionTab
+  const [tabs, setTabs] = useState<Map<string, SessionTab>>(new Map());
   // 当前配置（模型选择、主题等）
   const [config, setConfig] = useState<Record<string, unknown>>({});
+  // 侧边栏会话列表
+  const [sessions, setSessions] = useState<{ id: string; name: string; project_dir: string }[]>([]);
   // 侧边栏会话搜索文本
   const [searchText, setSearchText] = useState('');
-  // 指向消息列表底部的引用，用于自动滚动
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  // 记录已显示消息 ID 的集合，防止重复渲染
-  const seenMsgIds = useRef(new Set<string>());
+  // 消息加载状态（从活跃 tab 派生）
+  // 输入框的文本
+  const [inputText, setInputText] = useState('');
   // 输入框的 DOM 引用，用于调整高度等操作
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // 标记是否为用户的第一条消息，用于自动生成会话标题
-  const isFirstUserMsg = useRef(true);
 
-  // 任务执行流：是否显示任务面板
-  const [showTaskPanel, setShowTaskPanel] = useState(false);
-  // 任务事件列表：包含类型、子类型、摘要、原始数据和时间戳
-  const [taskEvents, setTaskEvents] = useState<{ type: string; subtype: string; summary: string; raw: string; timestamp: number }[]>([]);
-
-  // 流式消息：当前正在流式输出的消息
-  const [streamingMsg, setStreamingMsg] = useState<ChatMessage | null>(null);
-
-  // 会话内消息搜索关键词
-  const [msgSearch, setMsgSearch] = useState('');
-
+  // 任务执行流：是否显示任务面板（从活跃 tab 派生）
   // 快捷键面板是否显示
   const [showShortcuts, setShowShortcuts] = useState(false);
 
@@ -64,17 +84,29 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   const [showRightPanel, setShowRightPanel] = useState(true);
   // 左侧面板宽度（拖拽调整）
   const [leftPanelWidth, setLeftPanelWidth] = useState(200);
-  // 消息加载状态
-  const [loadingMessages, setLoadingMessages] = useState(false);
   // 终端高度
   const [terminalHeight, setTerminalHeight] = useState(160);
   // 终端显隐
   const [showTerminal, setShowTerminal] = useState(false);
   // 右侧面板标签 (context/tools/files)
   const [rightPanelTab, setRightPanelTab] = useState<'context' | 'tools' | 'files'>('context');
-  // 费用预算
-  const [budgetLimit, setBudgetLimit] = useState<number | null>(null);
-  const [currentCost, setCurrentCost] = useState(0);
+
+  // 附件图片
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
+  // 拖拽进入状态
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  // 获取当前活跃 Tab
+  const activeTab = activeTabId ? tabs.get(activeTabId) : null;
+  // 从活跃 Tab 派生的状态
+  const sessionId = activeTab?.sessionId || null;
+  const messages = activeTab?.messages || [];
+  const isRunning = activeTab?.isRunning || false;
+  const streamingMsg = activeTab?.streamingMsg || null;
+  const taskEvents = activeTab?.taskEvents || [];
+  const loadingMessages = activeTab?.loadingMessages || false;
+  const budgetLimit = activeTab?.budgetLimit ?? null;
+  const currentCost = activeTab?.currentCost ?? 0;
 
   // 组件挂载时：加载配置和会话列表，自动恢复最近一次会话
   useEffect(() => {
@@ -113,33 +145,26 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
 
-  // 选择/切换会话的回调函数
-  const handleSelectSession = useCallback(async (sid: string, projectDir?: string) => {
-    try {
-      setLoadingMessages(true);
-      // 如果当前有正在运行的会话且不是目标会话，先停止
-      if (sessionId && isRunning && sessionId !== sid) {
-        await api.cli.stop(sessionId);
+  // 加载会话数据到指定 Tab
+  const loadSessionToTab = useCallback(async (tabId: string, sid: string, dir: string) => {
+    setTabs(prev => {
+      const next = new Map(prev);
+      const tab = next.get(tabId);
+      if (tab) {
+        next.set(tabId, { ...tab, loadingMessages: true });
       }
-      // 更新当前会话 ID
-      setSessionId(sid);
-      // 清空已显示消息 ID 集合
-      seenMsgIds.current.clear();
-      // 清空任务消息 ID 引用
-      taskMsgIdsRef.current.clear();
-      // 清空消息搜索关键词
-      setMsgSearch('');
+      return next;
+    });
 
+    try {
       // 加载该会话的所有历史消息
       const msgs = await api.session.messages.load(sid) as { id: number; role: string; content: string; thinking: string | null; tool_steps: string | null; cost: number | null; duration: number | null; input_tokens: number | null; output_tokens: number | null; cache_creation_tokens: number | null; cache_read_tokens: number | null; timestamp: number }[];
       // 将原始消息数据转换为 ChatMessage 格式
       const parsedMsgs = (msgs || []).map(m => {
-        // 尝试解析工具调用步骤
         let parsedSteps: unknown[] | undefined;
         if (m?.tool_steps) {
           try { parsedSteps = JSON.parse(m.tool_steps); } catch { /* 解析失败则忽略 */ }
         }
-        // 返回格式化后的消息对象
         return {
           id: m.id,
           role: (m?.role || 'system') as ChatMessage['role'],
@@ -155,88 +180,279 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
           timestamp: m?.timestamp || Date.now(),
         };
       });
-      // 更新消息列表
-      setMessages(parsedMsgs);
-      // 如果已有用户消息，说明不是第一次对话（用于标题生成判断）
-      isFirstUserMsg.current = !parsedMsgs.some(m => m.role === 'user');
-      // 清除流式消息
-      setStreamingMsg(null);
 
-      // 获取项目目录：优先使用参数，否则从会话列表中查找
-      const dir = projectDir || sessions.find(s => s.id === sid)?.project_dir;
-      if (dir) {
-        setProjectDir(dir);
-        // 保存最近会话 ID 到配置中
-        // 保存最近会话（后端会合并到已有配置）
-        api.config.save({ lastSessionId: sid }).catch(() => {});
-        // 加载费用预算
-        api.session.getBudget(sid).then(b => { setBudgetLimit(b.budgetLimit); setCurrentCost(b.currentCost); }).catch(() => {});
-        // 启动 CLI 进程
-        const startResult = await api.cli.start(sid, dir, config);
-        // 启动成功则标记为运行中
-        if (startResult.ok) setIsRunning(true);
-      }
-    } catch (err) {
-      // 出错时打印错误并在界面显示
-      console.error('[handleSelectSession] error:', err);
-      setMessages([{ role: 'system' as const, content: `加载会话失败: ${err instanceof Error ? err.message : String(err)}`, timestamp: Date.now() }]);
-      isFirstUserMsg.current = false;
-    } finally {
-      setLoadingMessages(false);
-    }
-  }, [sessions, config, sessionId, isRunning]);
+      // 获取费用预算
+      let budget: { budgetLimit: number | null; currentCost: number } = { budgetLimit: null, currentCost: 0 };
+      try { budget = await api.session.getBudget(sid); } catch { /* ignore */ }
 
-  // 当消息列表或流式消息更新时，自动滚动到底部
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingMsg]);
-
-  // 监听 CLI 流式输出事件，实时更新流式消息
-  useEffect(() => {
-    return api.cli.onStream((data) => {
-      setStreamingMsg({
-        role: 'assistant',
-        content: data.text || '',
-        thinking: data.thinking,
-        toolSteps: data.toolSteps,
-        timestamp: Date.now(),
+      setTabs(prev => {
+        const next = new Map(prev);
+        const tab = next.get(tabId);
+        if (tab) {
+          next.set(tabId, {
+            ...tab,
+            messages: parsedMsgs,
+            isFirstUserMsg: !parsedMsgs.some(m => m.role === 'user'),
+            streamingMsg: null,
+            taskEvents: [],
+            taskMsgIds: new Set(),
+            seenMsgIds: new Set(),
+            loadingMessages: false,
+            budgetLimit: budget.budgetLimit,
+            currentCost: budget.currentCost,
+          });
+        }
+        return next;
       });
-    });
+    } catch (err) {
+      console.error('[loadSessionToTab] error:', err);
+      setTabs(prev => {
+        const next = new Map(prev);
+        const tab = next.get(tabId);
+        if (tab) {
+          next.set(tabId, {
+            ...tab,
+            messages: [{ role: 'system' as const, content: `加载会话失败: ${err instanceof Error ? err.message : String(err)}`, timestamp: Date.now() }],
+            loadingMessages: false,
+          });
+        }
+        return next;
+      });
+    }
   }, []);
 
-  // 任务事件引用集合，用于去重
-  const taskMsgIdsRef = useRef(new Set<string>());
-  // 监听 CLI 任务事件，将系统事件追加到消息列表
-  useEffect(() => {
-    return api.cli.onTask((data) => {
-      // 追加任务事件（保留最近 200 条）
-      setTaskEvents((prev) => [...prev.slice(-200), { type: data.type, subtype: data.subtype, summary: data.summary, raw: data.raw, timestamp: data.timestamp }]);
+  // 选择/切换会话 — 如果 Tab 已存在则激活，否则创建新 Tab
+  const handleSelectSession = useCallback(async (sid: string, projectDir?: string) => {
+    // 如果已有该会话的 Tab，直接激活
+    if (tabs.has(sid)) {
+      setActiveTabId(sid);
+      setProjectDir(tabs.get(sid)!.projectDir);
+      return;
+    }
 
-      // 系统初始化事件或结果事件需要追加到聊天消息中
-      if ((data.type === 'system' && data.subtype === 'init') || data.type === 'result') {
-        // 生成唯一消息 ID 用于去重
-        const msgId = `${data.type}_${data.subtype}_${data.timestamp}`;
-        if (!taskMsgIdsRef.current.has(msgId)) {
-          taskMsgIdsRef.current.add(msgId);
-          // 构建系统消息
-          const sysMsg: ChatMessage = { role: 'system', content: data.summary, timestamp: data.timestamp };
-          // 追加到消息列表（保留最近 500 条）
-          setMessages((prev) => [...prev.slice(-500), sysMsg]);
-          // 持久化到后端
-          if (sessionId) api.session.messages.save({ sessionId, role: 'system', content: data.summary, timestamp: data.timestamp });
+    const dir = projectDir || sessions.find(s => s.id === sid)?.project_dir;
+    if (!dir) return;
+
+    const newTab = createEmptyTab(sid, dir, sessions.find(s => s.id === sid)?.name || '会话');
+    setTabs(prev => new Map(prev).set(sid, newTab));
+    setActiveTabId(sid);
+    setProjectDir(dir);
+
+    // 如果当前有正在运行的会话且不是目标会话，先停止
+    if (sessionId && isRunning && sessionId !== sid) {
+      await api.cli.stop(sessionId);
+    }
+
+    // 保存最近会话 ID 到配置中
+    api.config.save({ lastSessionId: sid }).catch(() => {});
+
+    // 加载历史消息
+    await loadSessionToTab(sid, sid, dir);
+
+    // 启动 CLI 进程
+    const startResult = await api.cli.start(sid, dir, config);
+    if (startResult.ok) {
+      setTabs(prev => {
+        const next = new Map(prev);
+        const tab = next.get(sid);
+        if (tab) next.set(sid, { ...tab, isRunning: true });
+        return next;
+      });
+    }
+  }, [tabs, sessions, config, sessionId, isRunning, loadSessionToTab]);
+
+  // 新建会话 — 打开新 Tab
+  const handleStartSession = useCallback(async () => {
+    const dir = projectDir || (await api.fs.selectDirectory()) || process.cwd?.() || '~';
+    const result = await api.session.create({ projectDir: dir, name: '新会话' }) as { id: string };
+    const sid = result.id;
+
+    const newTab = createEmptyTab(sid, dir, '新会话');
+    setTabs(prev => new Map(prev).set(sid, newTab));
+    setActiveTabId(sid);
+    setProjectDir(dir);
+
+    // 刷新会话列表
+    api.session.list().then((s) => setSessions(s as { id: string; name: string; project_dir: string }[])).catch(() => {});
+
+    // 启动 CLI 进程
+    const startResult = await api.cli.start(sid, dir, config);
+    if (startResult.ok) {
+      setTabs(prev => {
+        const next = new Map(prev);
+        const tab = next.get(sid);
+        if (tab) {
+          next.set(sid, {
+            ...tab,
+            isRunning: true,
+            messages: [...tab.messages, { role: 'system' as const, content: `会话已启动 (PID: ${startResult.pid})`, timestamp: Date.now() }],
+          });
         }
+        return next;
+      });
+      // 持久化系统消息
+      await api.session.messages.save({ sessionId: sid, role: 'system', content: `会话已启动 (PID: ${startResult.pid})`, timestamp: Date.now() });
+    } else {
+      setTabs(prev => {
+        const next = new Map(prev);
+        const tab = next.get(sid);
+        if (tab) {
+          next.set(sid, {
+            ...tab,
+            messages: [...tab.messages, { role: 'system' as const, content: `启动失败: ${startResult.msg}`, timestamp: Date.now() }],
+          });
+        }
+        return next;
+      });
+    }
+  }, [projectDir, config]);
+
+  // 关闭 Tab
+  const handleCloseTab = useCallback(async (sid: string) => {
+    if (sid === sessionId && isRunning) {
+      await api.cli.stop(sid);
+    }
+    setTabs(prev => {
+      const next = new Map(prev);
+      next.delete(sid);
+      return next;
+    });
+    // 如果关闭的是当前活跃 Tab，切换到最后一个 Tab
+    if (activeTabId === sid) {
+      // We need to use setTimeout to read the updated tabs state
+      setTimeout(() => {
+        setTabs(prev => {
+          const keys = Array.from(prev.keys());
+          if (keys.length > 0) {
+            setActiveTabId(keys[keys.length - 1]);
+            const last = prev.get(keys[keys.length - 1]);
+            if (last) setProjectDir(last.projectDir);
+          } else {
+            setActiveTabId(null);
+            setProjectDir(null);
+          }
+          return prev;
+        });
+      }, 0);
+    }
+  }, [sessionId, isRunning, activeTabId]);
+
+  // 停止当前运行的会话
+  const handleStop = useCallback(async () => {
+    if (sessionId) {
+      await api.cli.stop(sessionId);
+      setTabs(prev => {
+        const next = new Map(prev);
+        const tab = next.get(sessionId);
+        if (tab) next.set(sessionId, { ...tab, isRunning: false, streamingMsg: null });
+        return next;
+      });
+    }
+  }, [sessionId]);
+
+  // 删除指定消息
+  const handleDeleteMessage = useCallback(async (msgId: number) => {
+    if (!sessionId) return;
+    await api.session.messages.delete(sessionId, msgId);
+    setTabs(prev => {
+      const next = new Map(prev);
+      const tab = next.get(sessionId);
+      if (tab) {
+        next.set(sessionId, { ...tab, messages: tab.messages.filter(m => m.id !== msgId) });
       }
+      return next;
     });
   }, [sessionId]);
 
-  // 监听 CLI 最终输出事件，将完整消息追加到聊天列表
+  // 更新单个 Tab 状态（helper）
+  const updateTab = useCallback((sid: string, updater: (tab: SessionTab) => Partial<SessionTab>) => {
+    setTabs(prev => {
+      const next = new Map(prev);
+      const tab = next.get(sid);
+      if (tab) next.set(sid, { ...tab, ...updater(tab) });
+      return next;
+    });
+  }, []);
+
+  // 发送用户输入
+  const handleSendInput = useCallback(async () => {
+    if (!inputText.trim() || !sessionId || !isRunning) return;
+
+    // 拼接附件图片
+    let finalText = inputText.trim();
+    if (attachedImages.length > 0) {
+      const imageMarkdown = attachedImages.map(img => `![${img.name}](${img.dataUrl})`).join('\n');
+      finalText = imageMarkdown + '\n\n' + finalText;
+      setAttachedImages([]);
+    }
+
+    const userMsg: ChatMessage = { role: 'user', content: finalText, timestamp: Date.now() };
+    updateTab(sessionId, () => ({ messages: [...messages, userMsg] }));
+    await api.session.messages.save({ sessionId, role: 'user', content: finalText, timestamp: userMsg.timestamp });
+
+    // 第一条用户消息时自动生成会话标题
+    if (activeTab?.isFirstUserMsg) {
+      updateTab(sessionId, () => ({ isFirstUserMsg: false }));
+      const title = generateTitle(inputText.trim());
+      if (title) {
+        await api.session.autoTitle({ sessionId, title });
+        api.session.list().then((s) => setSessions(s as { id: string; name: string; project_dir: string }[])).catch(() => {});
+      }
+    }
+
+    await api.cli.input(sessionId, inputText);
+    setInputText('');
+  }, [inputText, sessionId, isRunning, attachedImages, activeTab, messages, updateTab]);
+
+  // 监听 CLI 流式输出事件 — 按 sessionId 分发
+  useEffect(() => {
+    return api.cli.onStream((data) => {
+      const sid = data.sessionId;
+      updateTab(sid, () => ({
+        streamingMsg: {
+          role: 'assistant',
+          content: data.text || '',
+          thinking: data.thinking,
+          toolSteps: data.toolSteps,
+          timestamp: Date.now(),
+        },
+      }));
+    });
+  }, [updateTab]);
+
+  // 监听 CLI 任务事件 — 按 sessionId 分发
+  useEffect(() => {
+    return api.cli.onTask((data) => {
+      const sid = data.sessionId;
+      updateTab(sid, (tab) => {
+        const newEvents = [...tab.taskEvents.slice(-200), { type: data.type, subtype: data.subtype, summary: data.summary, raw: data.raw, timestamp: data.timestamp }];
+        let newMessages = [...tab.messages];
+        if ((data.type === 'system' && data.subtype === 'init') || data.type === 'result') {
+          const msgId = `${data.type}_${data.subtype}_${data.timestamp}`;
+          if (!tab.taskMsgIds.has(msgId)) {
+            const newIds = new Set(tab.taskMsgIds);
+            newIds.add(msgId);
+            newMessages = [...newMessages.slice(-500), { role: 'system' as const, content: data.summary, timestamp: data.timestamp }];
+            if (sid) api.session.messages.save({ sessionId: sid, role: 'system', content: data.summary, timestamp: data.timestamp }).catch(() => {});
+            return { taskEvents: newEvents, messages: newMessages, taskMsgIds: newIds };
+          }
+        }
+        return { taskEvents: newEvents };
+      });
+    });
+  }, [updateTab]);
+
+  // 监听 CLI 最终输出事件 — 按 sessionId 分发
   useEffect(() => {
     return api.cli.onOutput((data) => {
-      // 消息去重：如果已处理过则跳过
-      if (data.msgId && seenMsgIds.current.has(data.msgId)) return;
-      if (data.msgId) seenMsgIds.current.add(data.msgId);
+      const sid = data.sessionId;
+      if (data.msgId) {
+        // Use a flag to avoid updating in the same tick
+        const flag = `${sid}_${data.msgId}`;
+        if ((window as Record<string, boolean>)[flag]) return;
+        (window as Record<string, boolean>)[flag] = true;
+      }
 
-      // 构建聊天消息对象
       const msg: ChatMessage = {
         role: data.role || (data.type === 'stderr' ? 'system' : 'assistant'),
         content: data.text,
@@ -251,27 +467,32 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
         cacheReadTokens: data.cacheReadTokens,
       };
 
-      // 清除流式消息（因为最终结果已到达）
-      setStreamingMsg(null);
-      // 追加消息到列表（保留最近 500 条）
-      setMessages((prev) => [...prev.slice(-500), msg]);
-
-      // 持久化消息到后端
-      if (sessionId) {
-        api.session.messages.save({ sessionId, role: msg.role, content: msg.content, timestamp: msg.timestamp, thinking: msg.thinking, toolSteps: msg.toolSteps, cost: msg.cost, duration: msg.duration, inputTokens: msg.inputTokens, outputTokens: msg.outputTokens, cacheCreationTokens: msg.cacheCreationTokens, cacheReadTokens: msg.cacheReadTokens });
-      }
+      updateTab(sid, (tab) => {
+        const newMessages = [...tab.messages.slice(-500), msg];
+        if (sid) {
+          api.session.messages.save({ sessionId: sid, role: msg.role, content: msg.content, timestamp: msg.timestamp, thinking: msg.thinking, toolSteps: msg.toolSteps, cost: msg.cost, duration: msg.duration, inputTokens: msg.inputTokens, outputTokens: msg.outputTokens, cacheCreationTokens: msg.cacheCreationTokens, cacheReadTokens: msg.cacheReadTokens }).catch(() => {});
+        }
+        return { messages: newMessages, streamingMsg: null };
+      });
     });
-  }, [sessionId]);
+  }, [updateTab]);
 
-  // 监听 CLI 进程退出事件
+  // 监听 CLI 进程退出事件 — 按 sessionId 分发
   useEffect(() => {
     return api.cli.onExit((data) => {
-      setIsRunning(false);
-      setStreamingMsg(null);
-      // 在消息列表中追加退出信息
-      setMessages((prev) => [...prev, { role: 'system', content: `进程已退出 (code: ${data.code}, signal: ${data.signal})`, timestamp: Date.now() }]);
+      updateTab(data.sessionId, (tab) => ({
+        isRunning: false,
+        streamingMsg: null,
+        messages: [...tab.messages, { role: 'system', content: `进程已退出 (code: ${data.code}, signal: ${data.signal})`, timestamp: Date.now() }],
+      }));
     });
-  }, []);
+  }, [updateTab]);
+
+  // 自动滚动到底部
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingMsg]);
 
   // 打开项目目录选择对话框
   const handleOpenProject = useCallback(async () => {
@@ -279,87 +500,10 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
     if (dir) setProjectDir(dir);
   }, []);
 
-  // 创建新会话
-  const handleStartSession = useCallback(async () => {
-    // 获取项目目录：优先使用已有，否则弹出选择框，最后回退到当前工作目录
-    const dir = projectDir || (await api.fs.selectDirectory()) || process.cwd?.() || '~';
-    // 创建会话
-    const result = await api.session.create({ projectDir: dir, name: '新会话' }) as { id: string };
-    // 更新会话 ID
-    setSessionId(result.id);
-    setProjectDir(dir);
-    // 清空旧数据
-    setMessages([]);
-    setTaskEvents([]);
-    setStreamingMsg(null);
-    setMsgSearch('');
-    isFirstUserMsg.current = true;
-    // 刷新会话列表
-    api.session.list().then((s) => setSessions(s as { id: string; name: string; project_dir: string }[])).catch(() => {});
-
-    // 启动 CLI 进程
-    const startResult = await api.cli.start(result.id, dir, config);
-    // 根据启动结果显示系统消息
-    if (startResult.ok) {
-      setIsRunning(true);
-      const sysMsg = { role: 'system' as const, content: `会话已启动 (PID: ${startResult.pid})`, timestamp: Date.now() };
-      setMessages((prev) => [...prev, sysMsg]);
-      // 持久化系统消息
-      await api.session.messages.save({ sessionId: result.id, role: sysMsg.role, content: sysMsg.content, timestamp: sysMsg.timestamp });
-    } else {
-      setMessages((prev) => [...prev, { role: 'system' as const, content: `启动失败: ${startResult.msg}`, timestamp: Date.now() }]);
-    }
-  }, [projectDir, config]);
-
-  // 停止当前运行的会话
-  const handleStop = useCallback(async () => {
-    if (sessionId) { await api.cli.stop(sessionId); setIsRunning(false); setStreamingMsg(null); }
-  }, [sessionId]);
-
-  // 删除指定消息
-  const handleDeleteMessage = useCallback(async (msgId: number) => {
-    if (!sessionId) return;
-    // 从后端删除
-    await api.session.messages.delete(sessionId, msgId);
-    // 从前端状态中移除
-    setMessages(prev => prev.filter(m => m.id !== msgId));
-  }, [sessionId]);
-
-  // 发送用户输入
-  const handleSendInput = useCallback(async () => {
-    // 检查输入非空、有会话且 CLI 正在运行
-    if (inputText.trim() && sessionId && isRunning) {
-      // 构建用户消息
-      const userMsg: ChatMessage = { role: 'user', content: inputText.trim(), timestamp: Date.now() };
-      // 显示在聊天中
-      setMessages((prev) => [...prev, userMsg]);
-      // 持久化到后端
-      await api.session.messages.save({ sessionId, role: 'user', content: inputText.trim(), timestamp: userMsg.timestamp });
-
-      // 第一条用户消息时自动生成会话标题
-      if (isFirstUserMsg.current) {
-        isFirstUserMsg.current = false;
-        const title = generateTitle(inputText.trim());
-        if (title) {
-          // 更新会话标题
-          await api.session.autoTitle({ sessionId, title });
-          // 刷新会话列表以显示新标题
-          api.session.list().then((s) => setSessions(s as { id: string; name: string; project_dir: string }[])).catch(() => {});
-        }
-      }
-
-      // 将输入发送给 CLI
-      await api.cli.input(sessionId, inputText);
-      // 清空输入框
-      setInputText('');
-    }
-  }, [inputText, sessionId, isRunning]);
-
-  // 根据搜索关键词过滤消息（使用 useMemo 缓存）
+  // 消息搜索过滤
+  const [msgSearch, setMsgSearch] = useState('');
   const filteredMessages = useMemo(() => {
-    // 没有搜索词则返回全部消息
     if (!msgSearch.trim()) return messages;
-    // 将搜索词转为小写用于不区分大小写的匹配
     const q = msgSearch.toLowerCase();
     return messages.filter(m =>
       m.content.toLowerCase().includes(q) ||
@@ -371,10 +515,9 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   // 合并过滤后的消息和当前流式消息
   const allMessages = streamingMsg ? [...filteredMessages, streamingMsg] : filteredMessages;
 
-  // 使用 useMemo 计算 Token 和费用汇总
+  // Token 和费用汇总
   const tokenSummary = useMemo(() => {
     let inputTokens = 0, outputTokens = 0, cacheTokens = 0, cost = 0;
-    // 遍历所有消息累加各项统计
     for (const m of messages) {
       inputTokens += m.inputTokens ?? 0;
       outputTokens += m.outputTokens ?? 0;
@@ -384,7 +527,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
     return { inputTokens, outputTokens, cacheTokens, cost };
   }, [messages]);
 
-  // 根据搜索文本过滤会话列表
+  // 侧边栏会话过滤
   const filteredSessions = searchText
     ? sessions.filter(s => s.name.toLowerCase().includes(searchText.toLowerCase()) || s.project_dir.toLowerCase().includes(searchText.toLowerCase()))
     : sessions;
@@ -392,19 +535,15 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   // 注册全局键盘快捷键
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + Enter 发送消息
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         handleSendInput();
       }
-      // 按 ? 切换快捷键面板（且没有其他修饰键）
       if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         setShowShortcuts(prev => !prev);
       }
     };
-    // 绑定键盘事件
     window.addEventListener('keydown', handler);
-    // 组件卸载时移除事件监听
     return () => window.removeEventListener('keydown', handler);
   }, [handleSendInput]);
 
@@ -412,16 +551,69 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
   useEffect(() => {
     const el = inputRef.current;
     if (el) {
-      // 先重置高度为 auto，再根据内容设置
       el.style.height = 'auto';
       el.style.height = Math.min(el.scrollHeight, 120) + 'px';
     }
   }, [inputText]);
 
+  // 图片处理 — 读取文件为 data URL
+  const handleImageFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const id = `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      setAttachedImages(prev => [...prev, { id, name: file.name, dataUrl }]);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  // 粘贴图片
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault();
+        const file = items[i].getAsFile();
+        if (file) handleImageFile(file);
+        break;
+      }
+    }
+  }, [handleImageFile]);
+
+  // 拖拽文件
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = e.dataTransfer.files;
+    for (let i = 0; i < files.length; i++) {
+      if (files[i].type.startsWith('image/')) {
+        handleImageFile(files[i]);
+      }
+    }
+  }, [handleImageFile]);
+
+  // 从文件选择器选择图片
+  const handleSelectImages = useCallback(async () => {
+    const paths = await api.fs.selectFiles([
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] },
+    ]);
+    for (const p of paths) {
+      const dataUrl = await api.fs.readImage(p);
+      const id = `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const name = p.split('/').pop() || 'image';
+      setAttachedImages(prev => [...prev, { id, name, dataUrl }]);
+    }
+  }, []);
+
+  // 移除附件图片
+  const removeImage = useCallback((id: string) => {
+    setAttachedImages(prev => prev.filter(img => img.id !== id));
+  }, []);
+
   // 导出当前会话为 Markdown 文件
   const handleExport = useCallback(async () => {
     if (!sessionId) return;
-    // 构建 Markdown 内容的行数组
     const lines: string[] = [
       `# Session: ${sessionId}`,
       `Exported: ${new Date().toLocaleString()}`,
@@ -436,41 +628,32 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
       '',
     ];
 
-    // 遍历消息，逐条生成 Markdown 内容
     for (const m of allMessages) {
-      // 跳过系统消息
       if (m.role === 'system') continue;
       lines.push(`## ${m.role.toUpperCase()}\n`);
-      // 如果有思考过程，使用折叠标签包裹
       if (m.thinking) {
         lines.push('<details><summary>Thinking</summary>\n');
         lines.push(m.thinking, '\n</details>\n');
       }
-      // 如果有工具调用步骤，使用折叠标签包裹
       if (m.toolSteps?.length) {
         lines.push('<details><summary>Tool Steps</summary>\n');
         for (const s of m.toolSteps) {
           lines.push(`- **${s.name}** [${s.status}]`);
-          // 提取命令文本
           const cmd = typeof (s as Record<string, unknown>).input?.command === 'string'
             ? (s as Record<string, unknown>).input.command
             : JSON.stringify(s.input).slice(0, 200);
           lines.push(`  - Command: \`${cmd}\``);
-          // 截取前 300 字符的输出
           if (s.output) lines.push(`  - Output: ${s.output.slice(0, 300)}`);
         }
         lines.push('\n</details>\n');
       }
-      // 写入消息内容
       if (m.content) lines.push(m.content, '');
-      // 如果有 Token 信息，追加到引用中
       if ((m.inputTokens ?? 0) + (m.outputTokens ?? 0) > 0) {
         lines.push(`> Tokens: ↓${formatNum(m.inputTokens ?? 0)} / ↑${formatNum(m.outputTokens ?? 0)} | Cost: $${(m.cost ?? 0).toFixed(4)}\n`);
       }
       lines.push('---', '');
     }
 
-    // 创建 Blob 对象并触发浏览器下载
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -478,9 +661,63 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
     a.click();
   }, [sessionId, allMessages, tokenSummary]);
 
-  // JSX 渲染部分开始（以下为界面布局，不添加注释）
+  // JSX 渲染部分开始
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Tab 栏 */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-end', gap: 0,
+        borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)',
+        padding: '0 8px', minHeight: 36, flexShrink: 0, overflowX: 'auto',
+      }}>
+        {Array.from(tabs.entries()).map(([sid, tab]) => (
+          <div
+            key={sid}
+            onClick={() => { setActiveTabId(sid); setProjectDir(tab.projectDir); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', cursor: 'pointer', fontSize: 12,
+              borderBottom: sid === activeTabId ? '2px solid var(--cyan)' : '2px solid transparent',
+              background: sid === activeTabId ? 'rgba(0,229,255,0.06)' : 'transparent',
+              color: sid === activeTabId ? 'var(--text-primary)' : 'var(--text-dim)',
+              maxWidth: 180,
+              minWidth: 80,
+              borderRadius: '4px 4px 0 0',
+              transition: 'background 0.15s',
+            }}
+          >
+            <span className={`status-dot ${tab.isRunning ? 'running' : 'idle'}`} style={{ width: 6, height: 6, flexShrink: 0 }} />
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {tab.name}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleCloseTab(sid); }}
+              style={{
+                border: 'none', background: 'transparent', cursor: 'pointer',
+                color: 'var(--text-dim)', fontSize: 14, lineHeight: 1, padding: '0 2px',
+                flexShrink: 0,
+              }}
+              title="关闭标签"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        {/* 新建 Tab 按钮 */}
+        <button
+          onClick={handleStartSession}
+          style={{
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            color: 'var(--text-dim)', fontSize: 16, padding: '4px 10px',
+            lineHeight: 1,
+          }}
+          title="新建会话标签"
+        >
+          +
+        </button>
+      </div>
+
+      {/* 工具栏 */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
         borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', flexShrink: 0,
@@ -549,11 +786,18 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
                 onRename={async (sid, name) => {
                   await api.session.rename(sid, name);
                   api.session.list().then((list) => setSessions(list as { id: string; name: string; project_dir: string }[]));
+                  // 更新 Tab 名称
+                  setTabs(prev => {
+                    const next = new Map(prev);
+                    const tab = next.get(sid);
+                    if (tab) next.set(sid, { ...tab, name });
+                    return next;
+                  });
                 }}
                 onDelete={async (sid) => {
-                  if (sid === sessionId) { setSessionId(null); setMessages([]); }
+                  handleCloseTab(sid);
                   await api.session.delete(sid);
-                  api.session.list().then((list) => setSessions(list as { id: string; name: string; project_dir: string }[]));
+                  setSessions(prev => prev.filter(s => s.id !== sid));
                 }}
               />
             ))
@@ -588,6 +832,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
         )}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* 消息搜索栏 */}
           <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 11, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>搜索消息</span>
             <input
@@ -604,10 +849,10 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
             )}
           </div>
 
+          {/* 消息列表 */}
           <ErrorBoundary>
             <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               {loadingMessages ? (
-                // 骨架屏
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 0' }}>
                   {[1, 2, 3].map(i => (
                     <div key={i} style={{
@@ -650,8 +895,10 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
             </div>
           </ErrorBoundary>
 
+          {/* TemplatePicker */}
           <TemplatePicker onInsert={(text) => setInputText(prev => prev ? prev + '\n' + text : text)} />
 
+          {/* 快捷命令栏 */}
           <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {QUICK_COMMANDS.map((cmd, i) => (
               <button key={i} onClick={() => setInputText(prev => prev ? prev + '\n' + cmd.text : cmd.text)}
@@ -662,11 +909,37 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
             ))}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--border-color)', background: 'var(--bg-card)', flexShrink: 0 }}>
+          {/* 图片预览 */}
+          {attachedImages.length > 0 && (
+            <ImagePreview images={attachedImages} onRemove={removeImage} />
+          )}
+
+          {/* 输入框（支持拖拽和粘贴图片） */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={handleDrop}
+            onPaste={handlePaste}
+            style={{
+              display: 'flex', gap: 8, padding: '12px 16px',
+              borderTop: '1px solid var(--border-color)', background: 'var(--bg-card)', flexShrink: 0,
+              border: isDragOver ? '2px dashed var(--cyan)' : '2px solid transparent',
+              borderRadius: 6, margin: '0 4px 4px',
+              transition: 'border 0.15s',
+            }}
+          >
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleSelectImages}
+              style={{ fontSize: 14, padding: '4px 8px', flexShrink: 0, alignSelf: 'flex-end' }}
+              title="插入图片"
+            >
+              🖼
+            </button>
             <textarea
               ref={inputRef}
               className="input"
-              placeholder={isRunning ? '输入消息... (Enter 发送, Shift+Enter 换行)' : '请先启动会话'}
+              placeholder={isRunning ? '输入消息... (Enter 发送, Shift+Enter 换行, 粘贴/拖拽图片)' : '请先启动会话'}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => {
@@ -710,66 +983,55 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
             </div>
           ) : (
             <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
-              {/* 任务执行 */}
-              {showTaskPanel ? (
-                <div>
-                  {taskEvents.length === 0 ? (
-                    <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: 8 }}>暂无任务事件</div>
-                  ) : (
-                    taskEvents.map((evt, i) => <TaskEventItem key={i} event={evt} index={i} />)
-                  )}
+              <>
+                {/* 费用预算 */}
+                {sessionId && (
+                  <div style={{ marginBottom: 16, padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>费用预算</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.8 }}>
+                      <div>已用: <span style={{ color: currentCost >= (budgetLimit ?? Infinity) ? 'var(--danger)' : 'var(--cyan)', fontWeight: 600 }}>${currentCost.toFixed(4)}</span></div>
+                      {budgetLimit !== null && <div>限额: <span style={{ color: 'var(--text-primary)' }}>${budgetLimit.toFixed(2)}</span></div>}
+                    </div>
+                    <input className="input" type="number" step="0.1" min="0" placeholder="设置预算上限 ($)"
+                      value={budgetLimit ?? ''}
+                      onChange={(e) => { const v = e.target.value ? parseFloat(e.target.value) : null; setBudgetLimit(v); }}
+                      onBlur={() => { if (sessionId) api.session.setBudget({ sessionId, budgetLimit }).catch(() => {}); }}
+                      style={{ fontSize: 11, padding: '2px 6px', marginTop: 6 }} />
+                  </div>
+                )}
+
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>当前模型</div>
+                  <div style={{ fontSize: 13 }}>{String(config.model || 'claude-sonnet-4-6')}</div>
                 </div>
-              ) : (
-                <>
-                  {/* 费用预算 */}
-                  {sessionId && (
-                    <div style={{ marginBottom: 16, padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 6 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>费用预算</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.8 }}>
-                        <div>已用: <span style={{ color: currentCost >= (budgetLimit ?? Infinity) ? 'var(--danger)' : 'var(--cyan)', fontWeight: 600 }}>${currentCost.toFixed(4)}</span></div>
-                        {budgetLimit !== null && <div>限额: <span style={{ color: 'var(--text-primary)' }}>${budgetLimit.toFixed(2)}</span></div>}
-                      </div>
-                      <input className="input" type="number" step="0.1" min="0" placeholder="设置预算上限 ($)"
-                        value={budgetLimit ?? ''}
-                        onChange={(e) => { const v = e.target.value ? parseFloat(e.target.value) : null; setBudgetLimit(v); }}
-                        onBlur={() => { if (sessionId) api.session.setBudget({ sessionId, budgetLimit }).catch(() => {}); }}
-                        style={{ fontSize: 11, padding: '2px 6px', marginTop: 6 }} />
-                    </div>
-                  )}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>项目目录</div>
+                  <div style={{ fontSize: 11, wordBreak: 'break-all', color: 'var(--text-secondary)' }}>{projectDir || '未选择'}</div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>运行状态</div>
+                  <div className="flex items-center gap-2">
+                    <span className={`status-dot ${isRunning ? 'running' : 'idle'}`} />
+                    <span style={{ fontSize: 13 }}>{isRunning ? '运行中' : '空闲'}</span>
+                  </div>
+                </div>
 
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>当前模型</div>
-                    <div style={{ fontSize: 13 }}>{String(config.model || 'claude-sonnet-4-6')}</div>
-                  </div>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>项目目录</div>
-                    <div style={{ fontSize: 11, wordBreak: 'break-all', color: 'var(--text-secondary)' }}>{projectDir || '未选择'}</div>
-                  </div>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>运行状态</div>
-                    <div className="flex items-center gap-2">
-                      <span className={`status-dot ${isRunning ? 'running' : 'idle'}`} />
-                      <span style={{ fontSize: 13 }}>{isRunning ? '运行中' : '空闲'}</span>
-                    </div>
-                  </div>
-
-                  {(tokenSummary.inputTokens + tokenSummary.outputTokens + tokenSummary.cost) > 0 && (
-                    <div style={{ marginBottom: 16, padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 6 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>费用汇总</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.8 }}>
-                        <div>输入: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.inputTokens)}</span></div>
-                        <div>输出: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.outputTokens)}</span></div>
-                        {tokenSummary.cacheTokens > 0 && <div>缓存: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.cacheTokens)}</span></div>}
-                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 4, marginTop: 4 }}>
-                          总计: <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>${tokenSummary.cost.toFixed(4)}</span>
-                        </div>
+                {(tokenSummary.inputTokens + tokenSummary.outputTokens + tokenSummary.cost) > 0 && (
+                  <div style={{ marginBottom: 16, padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>费用汇总</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.8 }}>
+                      <div>输入: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.inputTokens)}</span></div>
+                      <div>输出: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.outputTokens)}</span></div>
+                      {tokenSummary.cacheTokens > 0 && <div>缓存: <span style={{ color: 'var(--text-primary)' }}>{formatNum(tokenSummary.cacheTokens)}</span></div>}
+                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 4, marginTop: 4 }}>
+                        总计: <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>${tokenSummary.cost.toFixed(4)}</span>
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  <button className="btn btn-secondary btn-sm w-full" onClick={async () => { if (sessionId) api.log.export(`/tmp/session-${sessionId}.log`, 'text'); }}>导出日志</button>
-                </>
-              )}
+                <button className="btn btn-secondary btn-sm w-full" onClick={async () => { if (sessionId) api.log.export(`/tmp/session-${sessionId}.log`, 'text'); }}>导出日志</button>
+              </>
             </div>
           )}
         </div>
@@ -859,7 +1121,6 @@ function formatNum(n: number): string {
 function generateTitle(text: string): string {
   const cleaned = text.replace(/\n+/g, ' ').trim();
   if (cleaned.length <= 20) return cleaned;
-  // 取前 20 字符，在词边界截断
   return cleaned.slice(0, 20).replace(/\s+\S*$/, '');
 }
 
@@ -910,39 +1171,6 @@ function SessionItem({
             style={{ fontSize: 10, padding: '2px 4px', color: 'var(--danger)', background: 'transparent', border: 'none', cursor: 'pointer', marginLeft: 2, flexShrink: 0 }}
             title="删除会话">✕</button>
         </>
-      )}
-    </div>
-  );
-}
-
-// 任务事件列表项组件：可展开查看原始数据
-function TaskEventItem({ event }: { event: { type: string; subtype: string; summary: string; raw: string; timestamp: number } }) {
-  // 是否展开显示原始数据
-  const [expanded, setExpanded] = useState(false);
-
-  // 事件类型与颜色的映射
-  const typeColor: Record<string, string> = { system: 'var(--cyan)', assistant: 'var(--purple)', result: 'var(--success)', user: 'var(--text-primary)' };
-  // 事件类型与图标的映射
-  const typeIcon: Record<string, string> = { system: '⚙', assistant: '💬', result: '✓', user: '👤' };
-
-  // 根据事件类型获取颜色和图标
-  const color = typeColor[event.type] || 'var(--text-dim)';
-  const icon = typeIcon[event.type] || '•';
-
-  return (
-    <div style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-      <div onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        <span style={{ fontSize: 10, lineHeight: 1.4 }}>{icon}</span>
-        <div style={{ flex: 1, fontSize: 11, color, lineHeight: 1.4 }}>{event.summary}</div>
-      </div>
-      {expanded && event.raw && (
-        <pre style={{
-          marginTop: 4, padding: 6, background: 'rgba(0,0,0,0.2)', borderRadius: 4,
-          fontSize: 10, color: 'var(--text-dim)', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-          maxHeight: 150, overflow: 'auto',
-        }}>
-          {(() => { try { return JSON.stringify(JSON.parse(event.raw), null, 2).slice(0, 1500); } catch { return event.raw.slice(0, 1500); } })()}
-        </pre>
       )}
     </div>
   );

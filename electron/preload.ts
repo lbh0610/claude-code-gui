@@ -164,6 +164,8 @@ const electronAPI = {
     readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
     readdir: (dirPath: string) => ipcRenderer.invoke('fs:readdir', dirPath),
     stat: (filePath: string) => ipcRenderer.invoke('fs:stat', filePath),
+    readImage: (filePath: string) => ipcRenderer.invoke('fs:readImage', filePath),
+    selectFiles: (filters?: Array<{ name: string; extensions: string[] }>) => ipcRenderer.invoke('fs:selectFiles', filters),
   },
 };
 

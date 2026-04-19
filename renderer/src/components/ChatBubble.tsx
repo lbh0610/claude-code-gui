@@ -1,8 +1,58 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 // 导入 Markdown 渲染库及插件
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+
+/**
+ * useTypewriter — 流式消息逐字显示效果
+ * 当 isStreaming=true 时，内容逐字显示（~200 chars/sec）
+ * 当 isStreaming=false 时，立即显示全部
+ */
+function useTypewriter(content: string, isStreaming: boolean): string {
+  const visibleLenRef = useRef(0);
+  const targetRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+  const fullContentRef = useRef('');
+  const [displayed, setDisplayed] = useState('');
+
+  // 内容源变化时：重置并启动动画
+  useEffect(() => {
+    fullContentRef.current = content;
+    targetRef.current = content.length;
+
+    if (!isStreaming) {
+      // 非流式立即显示全部
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      visibleLenRef.current = content.length;
+      setDisplayed(content);
+      return;
+    }
+
+    // 流式模式：启动 rAF 动画追赶目标
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    const step = () => {
+      const diff = targetRef.current - visibleLenRef.current;
+      if (diff <= 0) {
+        // 当前目标已追完，等下一轮内容更新
+        return;
+      }
+      // 每次推进约 5 个字符（16ms * 300 chars/sec ≈ 5）
+      visibleLenRef.current += Math.min(diff, Math.max(5, Math.floor(diff * 0.3)));
+      setDisplayed(content.slice(0, visibleLenRef.current));
+      rafRef.current = requestAnimationFrame(step);
+    };
+
+    rafRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [content, isStreaming]);
+
+  return isStreaming ? displayed : content;
+}
 
 // 聊天消息的数据结构定义
 export interface ChatMessage {
@@ -37,6 +87,10 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
   // 执行步骤区域的展开/折叠状态
   const [stepsExpanded, setStepsExpanded] = useState(true);
+
+  // 流式打字机效果
+  const displayedContent = useTypewriter(message.content, !!isStreaming);
+  const displayedThinking = useTypewriter(message.thinking || '', !!isStreaming);
 
   // 根据消息内容和流式状态自动调整思考区域的展开状态
   useEffect(() => {
@@ -201,7 +255,7 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
         )}
 
         {/* 思考过程区域 */}
-        {hasThinking && (
+        {displayedThinking && (
           <div style={{ marginBottom: 8 }}>
             <button
               onClick={() => setThinkingExpanded(!thinkingExpanded)}
@@ -242,11 +296,13 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
                   fontSize: 12,
                   color: 'var(--text-secondary)',
                   whiteSpace: 'pre-wrap',
+                  position: 'relative',
                 }}
               >
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {message.thinking}
+                  {displayedThinking}
                 </ReactMarkdown>
+                {isStreaming && <span className="typewriter-cursor" />}
               </div>
             )}
           </div>
@@ -339,8 +395,8 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
         )}
 
         {/* 正文内容：使用 Markdown 渲染 */}
-        {hasContent && (
-          <div className="chat-content">
+        {displayedContent && (
+          <div className="chat-content" style={{ position: 'relative' }}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}
@@ -348,8 +404,9 @@ export default function ChatBubble({ message, isStreaming, onReady, onDelete }: 
                 code: CodeBlock,
               }}
             >
-              {message.content}
+              {displayedContent}
             </ReactMarkdown>
+            {isStreaming && <span className="typewriter-cursor" />}
           </div>
         )}
 
