@@ -238,26 +238,24 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
     setActiveTabId(sid);
     setProjectDir(dir);
 
-    // 如果当前有正在运行的会话且不是目标会话，先停止
-    if (sessionId && isRunning && sessionId !== sid) {
-      await api.cli.stop(sessionId);
-    }
-
     // 保存最近会话 ID 到配置中
     api.config.save({ lastSessionId: sid }).catch(() => {});
 
     // 加载历史消息
     await loadSessionToTab(sid, sid, dir);
 
-    // 启动 CLI 进程
-    const startResult = await api.cli.start(sid, dir, config);
-    if (startResult.ok) {
-      setTabs(prev => {
-        const next = new Map(prev);
-        const tab = next.get(sid);
-        if (tab) next.set(sid, { ...tab, isRunning: true });
-        return next;
-      });
+    // 启动 CLI 进程（如果还没运行）
+    const tab = newTab;
+    if (!tab.isRunning) {
+      const startResult = await api.cli.start(sid, dir, config);
+      if (startResult.ok) {
+        setTabs(prev => {
+          const next = new Map(prev);
+          const t = next.get(sid);
+          if (t) next.set(sid, { ...t, isRunning: true });
+          return next;
+        });
+      }
     }
   }, [tabs, sessions, config, sessionId, isRunning, loadSessionToTab]);
 
@@ -736,7 +734,7 @@ export default function Workspace({ theme, onThemeChange }: { theme?: string; on
           <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
         </select>
         <button className="btn btn-secondary btn-sm" onClick={handleOpenProject}>📁 选择目录</button>
-        <button className="btn btn-primary btn-sm" onClick={handleStartSession} disabled={isRunning}>▶ 新建会话</button>
+        <button className="btn btn-primary btn-sm" onClick={handleStartSession}>▶ 新建会话</button>
         <button
           className="btn btn-secondary btn-sm"
           onClick={async () => {
