@@ -133,7 +133,8 @@ export async function startSession(
       cwd: projectDir,      // 设置工作目录
       env,                  // 注入环境变量
       stdio: ['pipe', 'pipe', 'pipe'],  // stdin/stdout/stderr 全部管道化
-      shell: false,         // 不使用 shell
+      // Windows 上 .cmd/.bat 文件需要 shell 才能执行
+      shell: process.platform === 'win32',
     });
 
     // 保存进程引用
