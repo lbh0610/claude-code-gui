@@ -51,12 +51,14 @@ Claude Code 是一个强大的 CLI 编程助手，但终端界面存在天然局
 │                                                              │
 │  main.ts ── 窗口管理 + IPC 路由分发                          │
 │     │                                                        │
-│     ├── cli-manager.ts  ── spawn('claude') 子进程管理         │
-│     ├── config-manager.ts ── 配置读写 + API Key 加密         │
-│     ├── session-manager.ts ── SQLite 会话 CRUD                │
-│     ├── log-manager.ts ── 日志查询 + 诊断包导出               │
-│     ├── plugin-manager.ts ── MCP 插件扫描/启停                │
-│     └── updater.ts ── 版本检查 + 离线补丁导入                 │
+│     ├── cli-manager.ts        ── spawn('claude') 子进程管理   │
+│     ├── config-manager.ts     ── 配置读写 + API Key 加密      │
+│     ├── session-manager.ts    ── SQLite 会话 CRUD + 标签      │
+│     ├── skill-manager.ts      ── Skills 管理                  │
+│     ├── log-manager.ts        ── 日志查询 + 诊断包导出         │
+│     ├── diagnostics-manager.ts ── 系统诊断中心（聚合信息）     │
+│     ├── plugin-manager.ts     ── 插件扫描/启停                │
+│     └── updater.ts            ── 版本检查 + 离线补丁导入        │
 │                                                              │
 │  database.ts ── better-sqlite3 封装                          │
 │  config.ts ── 应用目录初始化                                  │
@@ -65,11 +67,12 @@ Claude Code 是一个强大的 CLI 编程助手，但终端界面存在天然局
 ├──────────────────────────────────────────────────────────────┤
 │                     Electron 渲染进程                        │
 │                                                              │
-│  React 18 + TypeScript + Vite                                │
+│  React 18 + TypeScript + Vite 6                              │
 │  @tanstack/react-query (状态管理)                              │
 │  React Router (HashRouter)                                   │
 │                                                              │
-│  7 个页面：首页 / 工作区 / 会话 / 日志 / 插件 / 设置 / 更新    │
+│  8 个页面：首页 / 工作区 / 会话历史 / 日志诊断                 │
+│           系统诊断 / 设置中心 / Skills / 更新管理              │
 │  核心页面 Workspace：三栏布局（会话列表 / 聊天 / 上下文）       │
 │                                                              │
 │  preload.ts ── contextBridge 安全隔离                        │
@@ -101,11 +104,12 @@ Claude Code 是一个强大的 CLI 编程助手，但终端界面存在天然局
 ### 数据模型 / Data Model
 
 ```sql
-sessions    ── 会话 (id, project_dir, name, status, cli_pid, summary)
-messages    ── 消息 (session_id, role, content, timestamp)
-configs     ── 配置 (key, value, encrypted)
-logs        ── 日志 (timestamp, component, level, event, summary)
-plugins     ── 插件 (id, name, version, enabled, source)
+sessions       ── 会话 (id, project_dir, name, tags, status, cli_pid, summary)
+messages       ── 消息 (session_id, role, content, thinking, tool_steps, cost, duration, tokens...)
+configs        ── 配置 (key, value, encrypted)
+logs           ── 日志 (timestamp, component, level, event, summary)
+plugins        ── 插件 (id, name, version, enabled, source)
+user_skills    ── 自定义 Skills (id, enabled)
 update_history ── 更新记录 (from_version, to_version, status, method)
 ```
 
@@ -118,8 +122,9 @@ update_history ── 更新记录 (from_version, to_version, status, method)
 | Framework | Electron 33 |
 | Renderer | React 18 + TypeScript + Vite 6 |
 | Routing | React Router (HashRouter) |
-| State | @tanstack/react-query |
+| State | @tanstack/react-query + React useState/useRef |
 | Database | better-sqlite3 |
+| Encryption | Node.js crypto (AES-256-GCM) |
 | Build | electron-builder (macOS DMG, ARM64) |
 
 ---
@@ -173,15 +178,27 @@ npm run package:mac
 
 ## Feature Modules / 功能模块
 
-| Module | Path | Description |
-|--------|------|-------------|
-| 首页 | `/` | 状态总览、快捷操作、最近访问 |
-| 工作区 | `/workspace` | 三栏布局（项目树 / 终端 / 上下文），CLI 生命周期管理 |
-| 会话 | `/sessions` | 按项目筛选、搜索、归档、删除 |
-| 日志 | `/logs` | 级别筛选、详情面板、导出/诊断包 |
-| 插件 | `/plugins` | 插件卡片、版本/来源、启用/禁用 |
-| 设置 | `/settings` | 通用/账号/网关/代理/更新配置 |
-| 更新 | `/updates` | 版本信息、在线检查、离线补丁导入 |
+| 页面 | 路由 | 功能描述 |
+|------|------|----------|
+| 首页 | `/` | CLI 状态、今日使用统计（回复数/Token/费用）、快捷操作、最近会话列表、`⌘K` 快速跳转搜索 |
+| 工作区 | `/workspace` | 三栏布局（会话列表 / 聊天 / 上下文面板），CLI 生命周期管理，流式消息渲染（思考过程 + 工具调用），任务执行流面板，会话内消息搜索、单条删除、历史加载继续对话 |
+| 会话历史 | `/sessions` | 会话列表、标签编辑/过滤、搜索、批量删除、重命名 |
+| 日志诊断 | `/logs` | 日志级别筛选、关键词搜索、详情面板、导出诊断包、清除日志 |
+| 系统诊断 | `/plugins` | 系统环境（OS/CPU/内存）、配置状态（API Key/模型/代理/系统提示词）、数据库统计、CLI 引擎状态、存储用量、连接测试、一键清日志 |
+| 设置 | `/settings` | 通用配置、系统提示词（含快速预设）、账号与 API Key（AES-256-GCM 加密存储）、模型与网关、代理、配置导入/导出 |
+| Skills | `/skills` | Claude Code 自定义 Skills 的增删改查、启用/禁用、内容编辑 |
+| 更新 | `/updates` | 版本信息、在线检查更新、离线补丁导入 |
+
+### 核心功能特性
+
+- **会话管理**：按项目目录自动归档、标签分组、自动生成标题、跨重启持久化、继续历史对话
+- **流式渲染**：实时显示 AI 思考过程、工具调用步骤（running → done 状态机）
+- **安全存储**：API Key 使用 AES-256-GCM 加密，避免明文泄露；递归加密防护
+- **批量操作**：会话批量删除、插件批量启/禁用
+- **快捷键**：`⌘K` 全局快速跳转搜索会话
+- **消息操作**：每条消息可单独删除、整条复制，内容区域支持文本选中复制
+- **自定义系统提示词**：支持快速预设（简洁模式/中文注释/前端专家）
+- **环境隔离**：自定义环境变量注入、代理配置、模型切换
 
 ---
 
@@ -189,12 +206,14 @@ npm run package:mac
 
 | Namespace | Channels | Description |
 |-----------|----------|-------------|
-| `config` | `get` / `save` / `testConnection` | 配置读写 + 连接测试 |
-| `cli` | `start` / `stop` / `input` / `status` / `onOutput` / `onExit` / `onStatus` | CLI 进程控制与事件监听 |
-| `session` | `list` / `create` / `delete` / `messages:save` / `messages:load` | 会话 CRUD + 消息持久化 |
-| `log` | `list` / `export` / `diagnostic` | 日志查询与导出 |
+| `config` | `get` / `save` / `testConnection` / `export` / `import` | 配置读写 + 连接测试 + 导入/导出 |
+| `cli` | `start` / `stop` / `input` / `status` / `onOutput` / `onStream` / `onExit` / `onStatus` / `onTask` | CLI 进程控制与事件监听（含流式更新） |
+| `session` | `list` / `create` / `delete` / `rename` / `autoTitle` / `updateTags` / `messages:save` / `messages:load` / `messages:delete` | 会话 CRUD + 消息持久化 + 标签 + 自动标题 |
+| `log` | `list` / `export` / `diagnostic` / `delete` / `clear` | 日志查询、导出、删除、清空 |
 | `plugin` | `list` / `toggle` | 插件管理 |
+| `skill` | `list` / `get` / `create` / `update` / `delete` / `toggle` | Skills CRUD + 启停 |
 | `update` | `check` / `importPatch` / `info` | 更新管理 |
+| `diagnostic` | `get` | 系统诊断信息汇总 |
 | `fs` | `selectDirectory` / `readFile` | 文件系统操作 |
 | `app` | `getVersion` / `getPlatform` | 应用信息 |
 
@@ -214,32 +233,34 @@ npm run package:mac
 ## Project Structure / 项目结构
 
 ```
-├── electron/                     # 主进程
-│   ├── main.ts                   # 入口、窗口、IPC 注册
-│   ├── preload.ts                # Context Bridge 安全隔离
-│   ├── config.ts                 # 路径与目录初始化
-│   ├── database.ts               # SQLite 封装
+├── electron/                         # 主进程
+│   ├── main.ts                       # 入口、窗口、IPC 注册
+│   ├── preload.ts                    # Context Bridge 安全隔离
+│   ├── config.ts                     # 路径与目录初始化
+│   ├── database.ts                   # SQLite 封装（含迁移）
 │   └── handlers/
-│       ├── cli-manager.ts        # Claude Code 子进程管理
-│       ├── config-manager.ts     # 配置读写 + API Key 加密
-│       ├── session-manager.ts    # 会话 CRUD + 消息持久化
-│       ├── log-manager.ts        # 日志查询 + 诊断包
-│       ├── plugin-manager.ts     # MCP 插件扫描/启用/禁用
-│       └── updater.ts            # 版本检查 + 离线补丁
+│       ├── cli-manager.ts            # Claude Code 子进程管理（stream-json）
+│       ├── config-manager.ts         # 配置读写 + API Key AES-256-GCM 加密
+│       ├── session-manager.ts        # 会话 CRUD + 消息持久化 + 标签/自动标题
+│       ├── skill-manager.ts          # Skills 管理
+│       ├── log-manager.ts            # 日志查询 + 诊断包 + 清日志
+│       ├── diagnostics-manager.ts    # 系统诊断中心（系统/配置/DB/CLI/存储）
+│       ├── plugin-manager.ts         # 插件扫描/启停
+│       └── updater.ts                # 版本检查 + 离线补丁
 ├── database/
-│   └── schema.sql                # 6 张核心表
+│   └── schema.sql                    # 7 张核心表
 ├── config/
-│   └── default.json              # 默认配置
-├── renderer/                     # 渲染进程 (React)
+│   └── default.json                  # 默认配置
+├── renderer/                         # 渲染进程 (React)
 │   ├── vite.config.ts
 │   ├── src/
-│   │   ├── lib/api.ts            # IPC 封装 + Mock
-│   │   ├── components/           # ChatBubble, Sidebar, TopBar, Terminal, StatusCard
-│   │   └── pages/                # 7 个页面
-│   └── dist/                     # 构建产物
-├── electron-builder.json         # DMG 打包配置
-├── tsconfig.base.json            # 共享 TS 配置
-└── package.json                  # 根工作区 (npm workspaces)
+│   │   ├── lib/api.ts                # IPC 封装 + Browser Mock
+│   │   ├── components/               # ChatBubble, Sidebar, TopBar, Terminal, StatusCard, ErrorBoundary
+│   │   └── pages/                    # 8 个页面
+│   └── dist/                         # 构建产物
+├── electron-builder.json             # DMG 打包配置
+├── tsconfig.base.json                # 共享 TS 配置
+└── package.json                      # 根工作区 (npm workspaces)
 ```
 
 ---

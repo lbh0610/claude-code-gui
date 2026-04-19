@@ -13,17 +13,30 @@ const SETTINGS_SECTIONS = [
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('account');
   const [config, setConfig] = useState<Record<string, unknown>>({});
+  const [apiKeyInput, setApiKeyInput] = useState('');
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.config.get().then(setConfig).catch(() => {});
+    api.config.get().then(cfg => {
+      setConfig(cfg);
+      const display = cfg.apiKeyDisplay as string | undefined;
+      setApiKeyInput(display || '');
+      if (cfg.theme && typeof cfg.theme === 'string') {
+        onThemeChange?.(cfg.theme);
+      }
+    }).catch(() => {});
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.config.save(config);
+      const toSave = { ...config };
+      // 只在用户输入了新 key 时才更新
+      if (apiKeyInput && !apiKeyInput.startsWith('****') && apiKeyInput !== config.apiKeyDisplay) {
+        toSave.apiKey = apiKeyInput;
+      }
+      await api.config.save(toSave);
     } finally {
       setSaving(false);
     }
@@ -76,14 +89,14 @@ export default function Settings() {
             <input
               className="input"
               type="password"
-              placeholder="sk-ant-..."
-              value={String(config.apiKey || '')}
-              onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
+              placeholder={apiKeyInput ? '（已配置）' : 'sk-ant-...'}
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
               style={{ marginBottom: 16 }}
             />
 
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>
-              API Key 将在本地加密存储，不会上传到任何服务器
+              {apiKeyInput ? '已保存，修改后将覆盖原 Key' : 'API Key 将在本地加密存储，不会上传到任何服务器'}
             </div>
 
             <div className="flex gap-3">
