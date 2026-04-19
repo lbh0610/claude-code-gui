@@ -12,24 +12,36 @@ export interface ChatMessage {
 
 interface ChatBubbleProps {
   message: ChatMessage;
+  isStreaming?: boolean;
   onReady?: () => void;
 }
 
-export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
+export default function ChatBubble({ message, isStreaming, onReady }: ChatBubbleProps) {
   const [copied, setCopied] = useState(false);
+  // 流式消息：思考和步骤默认展开（实时更新中）
+  // 非流式（最终结果）：自动收起
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const [stepsExpanded, setStepsExpanded] = useState(true);
 
   useEffect(() => {
-    // 有完整回复时自动收起思考和步骤
-    if (message.thinking) {
+    if (!isStreaming && message.thinking) {
+      // 非流式 + 有思考内容 → 自动收起
       setThinkingExpanded(false);
       onReady?.();
+    } else if (isStreaming) {
+      // 流式中 → 保持展开，让用户实时看到
+      setThinkingExpanded(true);
+      setStepsExpanded(true);
     }
-    if (message.toolSteps && message.toolSteps.length > 0) {
+  }, [message.thinking, isStreaming]);
+
+  useEffect(() => {
+    if (!isStreaming && message.toolSteps?.length) {
       setStepsExpanded(false);
+    } else if (isStreaming) {
+      setStepsExpanded(true);
     }
-  }, [message.thinking, message.toolSteps]);
+  }, [message.toolSteps?.length, isStreaming]);
 
   if (message.role === 'system') {
     return (
@@ -48,6 +60,27 @@ export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
   const isUser = message.role === 'user';
   const hasThinking = !!message.thinking;
   const hasSteps = !!message.toolSteps && message.toolSteps.length > 0;
+  const hasContent = !!message.content;
+
+  // 流式状态下无内容时，显示加载指示
+  if (!hasContent && !hasThinking && !hasSteps && isStreaming) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '2px 0' }}>
+        <div style={{
+          padding: '10px 14px',
+          maxWidth: '85%',
+          color: 'var(--text-dim)',
+          fontSize: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span className="pulse-dot" />
+          思考中...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -63,10 +96,11 @@ export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
           maxWidth: '85%',
           padding: '10px 14px',
           position: 'relative',
+          opacity: isStreaming ? 0.85 : 1,
         }}
       >
         {/* 复制按钮 */}
-        {!isUser && (
+        {!isUser && !isStreaming && (
           <button
             className="btn-copy"
             onClick={handleCopy}
@@ -86,7 +120,23 @@ export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
           </button>
         )}
 
-        {/* 思考过程（可展开/收起） */}
+        {/* 流式指示器 */}
+        {isStreaming && (
+          <div style={{
+            position: 'absolute',
+            top: 6,
+            right: 8,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 11,
+            color: 'var(--text-dim)',
+          }}>
+            <span className="pulse-dot" />
+          </div>
+        )}
+
+        {/* 思考过程 */}
         {hasThinking && (
           <div style={{ marginBottom: 8 }}>
             <button
@@ -113,7 +163,8 @@ export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
               }}>
                 ▶
               </span>
-              {thinkingExpanded ? '收起思考过程' : '展开思考过程'}
+              思考过程
+              {isStreaming && <span style={{ fontSize: 10, opacity: 0.7 }}>（实时更新中）</span>}
             </button>
             {thinkingExpanded && (
               <div
@@ -126,6 +177,7 @@ export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
                   borderLeft: '3px solid rgba(124, 77, 255, 0.3)',
                   fontSize: 12,
                   color: 'var(--text-secondary)',
+                  whiteSpace: 'pre-wrap',
                 }}
               >
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -136,7 +188,7 @@ export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
           </div>
         )}
 
-        {/* 执行步骤（可展开/收起） */}
+        {/* 执行步骤 */}
         {hasSteps && (
           <div style={{ marginBottom: 8 }}>
             <button
@@ -164,6 +216,7 @@ export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
                 ▶
               </span>
               执行步骤 ({message.toolSteps!.length})
+              {isStreaming && <span style={{ fontSize: 10, opacity: 0.7 }}>（实时更新中）</span>}
             </button>
             {stepsExpanded && (
               <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -178,17 +231,12 @@ export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
                       fontFamily: 'var(--font-mono)',
                     }}
                   >
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      marginBottom: 3,
-                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                       <span className={`status-dot ${step.status === 'done' ? 'running' : 'idle'}`} />
                       <span style={{ color: 'var(--cyan)', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
                         {step.name}
                       </span>
-                      <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
+                      <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', fontSize: 11 }}>
                         {step.status === 'done' ? '完成' : '执行中'}
                       </span>
                     </div>
@@ -226,11 +274,13 @@ export default function ChatBubble({ message, onReady }: ChatBubbleProps) {
         )}
 
         {/* 正文内容 */}
-        <div className="chat-content">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {message.content}
-          </ReactMarkdown>
-        </div>
+        {hasContent && (
+          <div className="chat-content">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -253,3 +253,16 @@ body {
 
 .chat-content strong { color: var(--text-primary); }
 .chat-content em { color: var(--text-secondary); }
+
+/* 流式加载脉冲动画 */
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  animation: pulse 1.5s ease-in-out infinite;
+}

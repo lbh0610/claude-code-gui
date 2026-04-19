@@ -30,6 +30,18 @@ export function getDb(): Database.Database {
     db.exec(schema);
   }
 
+  // 迁移：为已存在的旧表添加缺失的列
+  try {
+    db.prepare('ALTER TABLE messages ADD COLUMN thinking TEXT').run();
+  } catch {
+    // 列已存在，忽略
+  }
+  try {
+    db.prepare('ALTER TABLE messages ADD COLUMN tool_steps TEXT').run();
+  } catch {
+    // 列已存在，忽略
+  }
+
   return db;
 }
 

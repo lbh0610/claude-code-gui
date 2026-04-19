@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS messages (
     session_id TEXT NOT NULL REFERENCES sessions(id),
     role TEXT NOT NULL,
     content TEXT NOT NULL,
+    thinking TEXT,
+    tool_steps TEXT,
     timestamp INTEGER NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );

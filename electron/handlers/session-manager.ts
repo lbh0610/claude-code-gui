@@ -43,14 +43,16 @@ interface MessageRow {
   session_id: string;
   role: string;
   content: string;
+  thinking: string | null;
+  tool_steps: string | null;
   timestamp: number;
 }
 
-export function saveMessage(sessionId: string, role: string, content: string, timestamp: number): void {
+export function saveMessage(sessionId: string, role: string, content: string, timestamp: number, thinking?: string, toolSteps?: unknown[]): void {
   const db = getDb();
   db.prepare(
-    'INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)'
-  ).run(sessionId, role, content, timestamp);
+    'INSERT INTO messages (session_id, role, content, thinking, tool_steps, timestamp) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(sessionId, role, content, thinking || null, toolSteps ? JSON.stringify(toolSteps) : null, timestamp);
 }
 
 export function loadMessages(sessionId: string): MessageRow[] {
@@ -79,6 +81,6 @@ export function registerSessionHandlers(ipcMain: Electron.IpcMain): void {
   ipcMain.handle('session:list', (_, { projectId }: { projectId?: string }) => listSessions(projectId));
   ipcMain.handle('session:create', (_, data: { projectDir: string; name: string }) => createSession(data));
   ipcMain.handle('session:delete', (_, sessionId: string) => deleteSession(sessionId));
-  ipcMain.handle('session:messages:save', (_, { sessionId, role, content, timestamp }: { sessionId: string; role: string; content: string; timestamp: number }) => saveMessage(sessionId, role, content, timestamp));
+  ipcMain.handle('session:messages:save', (_, { sessionId, role, content, timestamp, thinking, toolSteps }: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[] }) => saveMessage(sessionId, role, content, timestamp, thinking, toolSteps));
   ipcMain.handle('session:messages:load', (_, sessionId: string) => loadMessages(sessionId));
 }

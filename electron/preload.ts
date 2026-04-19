@@ -26,6 +26,12 @@ const electronAPI = {
       ipcRenderer.on('cli-output', handler);
       return () => ipcRenderer.removeListener('cli-output', handler);
     },
+    // 流式更新（思考过程 + 工具调用实时推送）
+    onStream: (cb: (data: { sessionId: string; thinking?: string; text?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => void) => {
+      const handler = (_: unknown, data: { sessionId: string; thinking?: string; text?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => cb(data);
+      ipcRenderer.on('cli-stream', handler);
+      return () => ipcRenderer.removeListener('cli-stream', handler);
+    },
     onExit: (cb: (data: { sessionId: string; code: number; signal: string }) => void) => {
       const handler = (_: unknown, data: { sessionId: string; code: number; signal: string }) => cb(data);
       ipcRenderer.on('cli-exit', handler);
@@ -45,7 +51,7 @@ const electronAPI = {
       ipcRenderer.invoke('session:create', data),
     delete: (sessionId: string) => ipcRenderer.invoke('session:delete', sessionId),
     messages: {
-      save: (data: { sessionId: string; role: string; content: string; timestamp: number }) =>
+      save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[] }) =>
         ipcRenderer.invoke('session:messages:save', data),
       load: (sessionId: string) => ipcRenderer.invoke('session:messages:load', sessionId),
     },

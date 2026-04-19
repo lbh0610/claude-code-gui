@@ -4,7 +4,7 @@ import { getCliPath } from '../config';
 
 /**
  * CLI 进程管理器
- * 使用 claude -p --input-format=stream-json --output-format=stream-json
+ * 使用 claude -p --verbose --input-format=stream-json --output-format=stream-json
  * 通过 stdin/stdout 管道通信，跳过 workspace trust 对话框
  */
 
@@ -72,7 +72,6 @@ export async function startSession(
     if (config.model && typeof config.model === 'string') {
       args.push('--model', config.model);
     }
-    // --dangerously-skip-permissions 跳过所有权限检查
     args.push('--dangerously-skip-permissions');
 
     console.log(`[CLI] 启动命令: ${cliPath} ${args.join(' ')}`);
@@ -90,11 +89,21 @@ export async function startSession(
 
     sendToRenderer('cli-status', { status: 'running', pid: child.pid });
 
-    // 捕获 stdout（解析 stream-json，按角色发送）
+    // 流式解析 stdout
     let buffer = '';
     let assistantTurnText = '';
     let assistantTurnThinking = '';
     let toolSteps: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] = [];
+
+    /** 发送当前累积的流式更新 */
+    function sendStreamingUpdate() {
+      sendToRenderer('cli-stream', {
+        sessionId,
+        thinking: assistantTurnThinking || undefined,
+        text: assistantTurnText || undefined,
+        toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
+      });
+    }
 
     child.stdout?.on('data', (data: Buffer) => {
       buffer += data.toString('utf-8');
@@ -110,45 +119,40 @@ export async function startSession(
                 assistantTurnText += part.text;
               } else if (part.type === 'thinking') {
                 assistantTurnThinking += part.thinking || '';
+                // 流式推送思考过程
+                sendStreamingUpdate();
               } else if (part.type === 'tool_use') {
-                // 捕获工具调用（Bash 命令、文件编辑等）
                 const toolName = part.name || part.tool_name || 'unknown';
                 const toolInput = part.input || {};
                 toolSteps.push({ name: toolName, input: toolInput, status: 'running' });
-                // 把工具调用也加入思考过程文本
-                if (toolName === 'Bash' && typeof toolInput.command === 'string') {
-                  assistantTurnThinking += `\n\n**执行命令:**\n\`\`\`bash\n${toolInput.command}\n\`\`\`\n`;
-                } else {
-                  assistantTurnThinking += `\n\n**调用工具 ${toolName}:** ${JSON.stringify(toolInput).slice(0, 100)}\n`;
-                }
+                // 流式推送工具调用
+                sendStreamingUpdate();
               } else if (part.type === 'tool_result') {
-                // 捕获工具执行结果
                 const lastStep = toolSteps[toolSteps.length - 1];
                 if (lastStep) {
                   lastStep.status = 'done';
-                  lastStep.output = typeof part.content === 'string' ? part.content.slice(0, 200) : '';
-                  assistantTurnThinking += lastStep.output ? `\n**结果:** \`${lastStep.output}\`\n` : '\n**完成**\n';
+                  lastStep.output = typeof part.content === 'string' ? part.content.slice(0, 500) : '';
+                  // 流式推送工具结果
+                  sendStreamingUpdate();
                 }
               }
             }
           }
           if (msg.type === 'result') {
-            // 发送累积的 assistant 回复（带唯一 ID 去重）
-            if (assistantTurnText || assistantTurnThinking) {
-              messageCounter++;
-              sendToRenderer('cli-output', {
-                sessionId,
-                type: 'stdout' as const,
-                text: assistantTurnText,
-                thinking: assistantTurnThinking || undefined,
-                toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
-                role: 'assistant' as const,
-                msgId: `${sessionId}_a_${messageCounter}`,
-              });
-              assistantTurnText = '';
-              assistantTurnThinking = '';
-              toolSteps = [];
-            }
+            // 最终结果：发送完整消息（带唯一 msgId 去重）
+            messageCounter++;
+            sendToRenderer('cli-output', {
+              sessionId,
+              type: 'stdout' as const,
+              text: assistantTurnText,
+              thinking: assistantTurnThinking || undefined,
+              toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
+              role: 'assistant' as const,
+              msgId: `${sessionId}_a_${messageCounter}`,
+            });
+            assistantTurnText = '';
+            assistantTurnThinking = '';
+            toolSteps = [];
           }
         } catch {
           // 非 JSON 行，原样发送

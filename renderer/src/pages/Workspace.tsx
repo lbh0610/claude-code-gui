@@ -10,9 +10,11 @@ export default function Workspace() {
   const [inputText, setInputText] = useState('');
   const [sessions, setSessions] = useState<{ id: string; name: string; project_dir: string }[]>([]);
   const [config, setConfig] = useState<Record<string, unknown>>({});
-  const [assistantBuffer, setAssistantBuffer] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const seenMsgIds = useRef(new Set<string>());
+
+  // 流式消息：实时更新思考和工具调用
+  const [streamingMsg, setStreamingMsg] = useState<ChatMessage | null>(null);
 
   // 加载配置和会话列表
   useEffect(() => {
@@ -22,17 +24,21 @@ export default function Workspace() {
 
   // 选择会话：加载历史消息，如有运行中的会话先停止再重启
   const handleSelectSession = useCallback(async (sid: string) => {
-    // 先停掉当前运行的会话
     if (sessionId && isRunning && sessionId !== sid) {
       await api.cli.stop(sessionId);
     }
     setSessionId(sid);
     seenMsgIds.current.clear();
-    const msgs = await api.session.messages.load(sid) as { role: string; content: string; timestamp: number }[];
-    setMessages(msgs.map(m => ({ role: m.role as ChatMessage['role'], content: m.content, timestamp: m.timestamp })));
-    setAssistantBuffer('');
+    const msgs = await api.session.messages.load(sid) as { role: string; content: string; thinking: string | null; tool_steps: string | null; timestamp: number }[];
+    setMessages(msgs.map(m => ({
+      role: m.role as ChatMessage['role'],
+      content: m.content,
+      thinking: m.thinking || undefined,
+      toolSteps: m.tool_steps ? JSON.parse(m.tool_steps) : undefined,
+      timestamp: m.timestamp,
+    })));
+    setStreamingMsg(null);
 
-    // 找到该会话对应的项目目录，重启 CLI
     const session = sessions.find(s => s.id === sid);
     if (session) {
       setProjectDir(session.project_dir);
@@ -46,19 +52,27 @@ export default function Workspace() {
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, streamingMsg]);
 
-  // 监听 CLI 输出（带 msgId 去重）
+  // 流式更新：实时显示思考过程和工具调用
+  useEffect(() => {
+    return api.cli.onStream((data) => {
+      setStreamingMsg({
+        role: 'assistant',
+        content: data.text || '',
+        thinking: data.thinking,
+        toolSteps: data.toolSteps,
+        timestamp: Date.now(),
+      });
+    });
+  }, []);
+
+  // 最终结果：将流式消息固化为永久消息
   useEffect(() => {
     return api.cli.onOutput((data) => {
-      // 去重：同一 msgId 只处理一次
       if (data.msgId) {
         if (seenMsgIds.current.has(data.msgId)) return;
         seenMsgIds.current.add(data.msgId);
-      }
-
-      if (data.role === 'assistant') {
-        setAssistantBuffer((prev) => prev + data.text);
       }
 
       const msg: ChatMessage = {
@@ -68,26 +82,30 @@ export default function Workspace() {
         toolSteps: data.toolSteps,
         timestamp: Date.now(),
       };
+
+      // 清除流式消息，追加永久消息
+      setStreamingMsg(null);
       setMessages((prev) => [...prev.slice(-500), msg]);
 
-      // 持久化到数据库
+      // 持久化
       if (sessionId) {
-        api.session.messages.save({ sessionId, role: msg.role, content: msg.content, timestamp: msg.timestamp });
+        api.session.messages.save({
+          sessionId,
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp,
+          thinking: msg.thinking,
+          toolSteps: msg.toolSteps,
+        });
       }
     });
   }, [sessionId]);
-
-  // 监听 assistant buffer 完成后追加为单一气泡
-  useEffect(() => {
-    // buffer 累积完成时，将之前零散的 assistant 消息合并显示
-    // 这里依赖 onOutput 已经逐条发送，不需要额外处理
-  }, [assistantBuffer]);
 
   // 监听 CLI 退出
   useEffect(() => {
     return api.cli.onExit((data) => {
       setIsRunning(false);
-      setAssistantBuffer('');
+      setStreamingMsg(null);
       const exitMsg: ChatMessage = {
         role: 'system',
         content: `进程已退出 (code: ${data.code}, signal: ${data.signal})`,
@@ -108,9 +126,8 @@ export default function Workspace() {
     setSessionId(result.id);
     setProjectDir(dir);
     setMessages([]);
-    setAssistantBuffer('');
+    setStreamingMsg(null);
 
-    // 刷新会话列表
     api.session.list().then((s) => setSessions(s as { id: string; name: string; project_dir: string }[])).catch(() => {});
 
     const startResult = await api.cli.start(result.id, dir, config);
@@ -136,7 +153,7 @@ export default function Workspace() {
     if (sessionId) {
       await api.cli.stop(sessionId);
       setIsRunning(false);
-      setAssistantBuffer('');
+      setStreamingMsg(null);
     }
   }, [sessionId]);
 
@@ -153,6 +170,9 @@ export default function Workspace() {
       setInputText('');
     }
   }, [inputText, sessionId, isRunning]);
+
+  // 渲染：永久消息 + 流式消息
+  const allMessages = streamingMsg ? [...messages, streamingMsg] : messages;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -182,7 +202,6 @@ export default function Workspace() {
         <button
           className="btn btn-secondary btn-sm"
           onClick={async () => {
-            // 如果有选中的会话且未运行，恢复它
             if (sessionId && !isRunning) {
               const session = sessions.find(s => s.id === sessionId);
               if (session) {
@@ -191,7 +210,6 @@ export default function Workspace() {
               }
               return;
             }
-            // 否则加载最近会话
             const list = await api.session.list().catch(() => []) as { id: string; name: string; project_dir: string }[];
             setSessions(list);
             if (list.length > 0) {
@@ -250,15 +268,20 @@ export default function Workspace() {
                 <button
                   className="btn btn-sm"
                   onClick={async () => {
-                    // 先停当前，再重启该会话
                     if (sessionId && isRunning && sessionId !== s.id) {
                       await api.cli.stop(sessionId);
                     }
                     setSessionId(s.id);
                     seenMsgIds.current.clear();
-                    const msgs = await api.session.messages.load(s.id) as { role: string; content: string; timestamp: number }[];
-                    setMessages(msgs.map(m => ({ role: m.role as ChatMessage['role'], content: m.content, timestamp: m.timestamp })));
-                    setAssistantBuffer('');
+                    const msgs = await api.session.messages.load(s.id) as { role: string; content: string; thinking: string | null; tool_steps: string | null; timestamp: number }[];
+                    setMessages(msgs.map(m => ({
+                      role: m.role as ChatMessage['role'],
+                      content: m.content,
+                      thinking: m.thinking || undefined,
+                      toolSteps: m.tool_steps ? JSON.parse(m.tool_steps) : undefined,
+                      timestamp: m.timestamp,
+                    })));
+                    setStreamingMsg(null);
                     setProjectDir(s.project_dir);
                     const startResult = await api.cli.start(s.id, s.project_dir, config);
                     if (startResult.ok) setIsRunning(true);
@@ -293,13 +316,13 @@ export default function Workspace() {
             flexDirection: 'column',
             gap: 8,
           }}>
-            {messages.length === 0 ? (
+            {allMessages.length === 0 ? (
               <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 60, fontSize: 14 }}>
                 暂无消息，启动会话后开始对话
               </div>
             ) : (
-              messages.map((msg, i) => (
-                <ChatBubble key={i} message={msg} />
+              allMessages.map((msg, i) => (
+                <ChatBubble key={i} message={msg} isStreaming={i === allMessages.length - 1 && !!streamingMsg} />
               ))
             )}
             <div ref={messagesEndRef} />

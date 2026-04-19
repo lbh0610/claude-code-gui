@@ -16,6 +16,7 @@ export interface ElectronAPI {
     input: (sessionId: string, input: string) => Promise<void>;
     status: () => Promise<{ status: string; pid: number | null; sessionCount: number }>;
     onOutput: (cb: (data: { sessionId: string; type: 'stdout' | 'stderr'; text: string; thinking?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[]; role?: 'user' | 'assistant' | 'system'; msgId?: string }) => void) => () => void;
+    onStream: (cb: (data: { sessionId: string; thinking?: string; text?: string; toolSteps?: { name: string; input: Record<string, unknown>; output?: string; status: 'running' | 'done' }[] }) => void) => () => void;
     onExit: (cb: (data: { sessionId: string; code: number; signal: string }) => void) => () => void;
     onStatus: (cb: (data: { status: string; pid: number | null }) => void) => () => void;
   };
@@ -24,7 +25,7 @@ export interface ElectronAPI {
     create: (data: { projectId?: string; projectDir: string; name: string }) => Promise<unknown>;
     delete: (sessionId: string) => Promise<void>;
     messages: {
-      save: (data: { sessionId: string; role: string; content: string; timestamp: number }) => Promise<void>;
+      save: (data: { sessionId: string; role: string; content: string; timestamp: number; thinking?: string; toolSteps?: unknown[] }) => Promise<void>;
       load: (sessionId: string) => Promise<unknown[]>;
     };
   };
