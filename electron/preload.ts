@@ -85,6 +85,16 @@ const electronAPI = {
     info: () => ipcRenderer.invoke('update:info'),
   },
 
+  // Skills 管理
+  skill: {
+    list: () => ipcRenderer.invoke('skill:list'),
+    get: (id: string) => ipcRenderer.invoke('skill:get', id),
+    create: (data: { name: string; description: string; content: string }) => ipcRenderer.invoke('skill:create', data),
+    update: (data: { id: string; name: string; description: string; content: string }) => ipcRenderer.invoke('skill:update', data),
+    delete: (id: string) => ipcRenderer.invoke('skill:delete', id),
+    toggle: (id: string, enabled: boolean) => ipcRenderer.invoke('skill:toggle', { id, enabled }),
+  },
+
   // 文件系统
   fs: {
     selectDirectory: () => ipcRenderer.invoke('fs:selectDirectory'),

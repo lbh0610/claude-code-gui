@@ -10,6 +10,7 @@ import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import Plugins from './pages/Plugins';
 import Updates from './pages/Updates';
+import Skills from './pages/Skills';
 import { api } from './lib/api';
 
 const queryClient = new QueryClient();
@@ -59,6 +60,7 @@ export default function App() {
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/plugins" element={<Plugins />} />
                 <Route path="/updates" element={<Updates />} />
+                <Route path="/skills" element={<Skills />} />
               </Routes>
             </main>
           </div>

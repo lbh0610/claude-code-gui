@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { path: '/logs', icon: '☰', label: '日志诊断' },
   { path: '/plugins', icon: '⧉', label: '插件管理' },
   { path: '/settings', icon: '⚙', label: '设置中心' },
+  { path: '/skills', icon: '★', label: 'Skills 管理' },
   { path: '/updates', icon: '↻', label: '更新管理' },
 ];
 

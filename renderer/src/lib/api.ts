@@ -45,6 +45,14 @@ export interface ElectronAPI {
     importPatch: (filePath: string) => Promise<{ ok: boolean; msg: string }>;
     info: () => Promise<unknown>;
   };
+  skill: {
+    list: () => Promise<{ id: string; name: string; description: string; enabled: boolean }[]>;
+    get: (id: string) => Promise<{ id: string; name: string; description: string; content: string; hasAgents: boolean; hasReferences: boolean; hasScripts: boolean; subdirs: string[]; enabled: boolean } | null>;
+    create: (data: { name: string; description: string; content: string }) => Promise<{ ok: boolean; id: string; msg?: string }>;
+    update: (data: { id: string; name: string; description: string; content: string }) => Promise<{ ok: boolean; msg?: string }>;
+    delete: (id: string) => Promise<{ ok: boolean; msg?: string }>;
+    toggle: (id: string, enabled: boolean) => Promise<void>;
+  };
   fs: {
     selectDirectory: () => Promise<string | null>;
     readFile: (filePath: string) => Promise<string>;
@@ -102,6 +110,14 @@ function getApi(): ElectronAPI {
       check: () => Promise.resolve({ available: false, latestVersion: '0.1.0', releaseNotes: '' }),
       importPatch: () => Promise.resolve({ ok: false, msg: 'mock' }),
       info: () => Promise.resolve({ currentVersion: '0.1.0', appName: 'Agent Workbench', platform: 'mock', arch: 'arm64' }),
+    },
+    skill: {
+      list: () => Promise.resolve([]),
+      get: () => Promise.resolve(null),
+      create: () => Promise.resolve({ ok: false, msg: 'mock' }),
+      update: () => Promise.resolve({ ok: false, msg: 'mock' }),
+      delete: () => Promise.resolve({ ok: false, msg: 'mock' }),
+      toggle: () => Promise.resolve(),
     },
     fs: {
       selectDirectory: () => Promise.resolve(null),

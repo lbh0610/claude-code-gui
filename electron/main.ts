@@ -7,6 +7,7 @@ import { registerCliHandlers, setMainWindow } from './handlers/cli-manager';
 import { registerSessionHandlers } from './handlers/session-manager';
 import { registerLogHandlers } from './handlers/log-manager';
 import { registerPluginHandlers } from './handlers/plugin-manager';
+import { registerSkillHandlers } from './handlers/skill-manager';
 import { registerUpdateHandlers } from './handlers/updater';
 import { APP_VERSION, APP_NAME } from './config';
 
@@ -54,6 +55,7 @@ function registerHandlers(): void {
   registerSessionHandlers(ipcMain);
   registerLogHandlers(ipcMain);
   registerPluginHandlers(ipcMain);
+  registerSkillHandlers(ipcMain);
   registerUpdateHandlers(ipcMain);
 
   // 文件系统操作

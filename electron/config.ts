@@ -18,6 +18,9 @@ export const LOG_DIR = path.join(APP_DATA_DIR, 'logs');
 // 插件目录
 export const PLUGIN_DIR = path.join(APP_DATA_DIR, 'plugins');
 
+// Skills 目录
+export const SKILLS_PATH = path.join(app.getPath('home'), '.claude', 'skills');
+
 // 配置文件路径
 export const CONFIG_PATH = path.join(APP_DATA_DIR, 'config.json');
 
