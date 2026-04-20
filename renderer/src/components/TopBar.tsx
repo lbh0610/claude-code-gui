@@ -31,6 +31,7 @@ export default function TopBar({ theme, onThemeChange }: TopBarProps) {
       alignItems: 'center',
       padding: '0 16px',
       gap: 16,
+      WebkitAppRegion: 'drag',
     }}>
       {/* Logo */}
       <div style={{
@@ -52,7 +53,7 @@ export default function TopBar({ theme, onThemeChange }: TopBarProps) {
           placeholder="搜索项目、会话、日志..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ padding: '6px 12px', fontSize: 12 }}
+          style={{ padding: '6px 12px', fontSize: 12, WebkitAppRegion: 'no-drag' }}
         />
       </div>
 
@@ -67,7 +68,7 @@ export default function TopBar({ theme, onThemeChange }: TopBarProps) {
           className="btn btn-secondary btn-sm"
           onClick={handleToggleTheme}
           title="切换全局主题"
-          style={{ fontSize: 11, padding: '4px 10px', minWidth: 50 }}
+          style={{ fontSize: 11, padding: '4px 10px', minWidth: 50, WebkitAppRegion: 'no-drag' }}
         >
           {theme === 'dark' ? '☀ 亮色' : '🌙 暗色'}
         </button>

@@ -28,6 +28,8 @@ export default function Home() {
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>([]);
   // 今日统计数据
   const [todayStats, setTodayStats] = useState({ count: 0, tokens: 0, cost: 0 });
+  // 全部历史累计统计
+  const [totalStats, setTotalStats] = useState({ sessions: 0, messages: 0, tokens: 0, cost: 0 });
   // CLI 检测状态
   const [cliDetected, setCliDetected] = useState(false);
   // Cmd+K 快速跳转面板显隐
@@ -54,10 +56,11 @@ export default function Home() {
     return unsub;
   }, []);
 
-  // 挂载时：加载最近会话、今日统计、全部会话、CLI 检测
+  // 挂载时：加载最近会话、今日统计、累计统计、全部会话、CLI 检测
   useEffect(() => {
     loadRecent();
     loadTodayStats();
+    loadTotalStats();
     loadAllSessions();
     api.cli.detect().then((r: { found: boolean }) => setCliDetected(r.found)).catch(() => {});
   }, []);
@@ -94,6 +97,23 @@ export default function Home() {
         }
       }
       setTodayStats({ count, tokens, cost });
+    } catch { /* 忽略错误 */ }
+  };
+
+  // 加载全部历史累计统计
+  const loadTotalStats = async () => {
+    try {
+      const sessions = await api.session.list() as { id: string }[];
+      let messages = 0, tokens = 0, cost = 0;
+      for (const s of sessions) {
+        const msgs = await api.session.messages.load(s.id) as { role: string; timestamp: number; input_tokens?: number; output_tokens?: number; cost?: number }[];
+        for (const m of (msgs || [])) {
+          if (m.role !== 'system') messages++;
+          tokens += (m.input_tokens || 0) + (m.output_tokens || 0);
+          cost += m.cost || 0;
+        }
+      }
+      setTotalStats({ sessions: sessions.length, messages, tokens, cost });
     } catch { /* 忽略错误 */ }
   };
 
@@ -178,7 +198,7 @@ export default function Home() {
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)' }}>
         今日使用
       </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
         <div className="card" style={{ textAlign: 'center', padding: 16 }}>
           <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--cyan)' }}>{todayStats.count}</div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>AI 回复次数</div>
@@ -194,6 +214,29 @@ export default function Home() {
             ${todayStats.cost.toFixed(4)}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>今日费用</div>
+        </div>
+      </div>
+
+      {/* 累计统计 */}
+      <div className="card" style={{ marginBottom: 32, padding: 16, background: 'rgba(0,229,255,0.03)', border: '1px solid rgba(0,229,255,0.1)' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 10 }}>累计统计</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--cyan)' }}>{totalStats.sessions}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>总会话</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--purple)' }}>{formatNum(totalStats.messages)}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>总消息</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--cyan)' }}>{formatNum(totalStats.tokens)}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>总 Token</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--success)' }}>${totalStats.cost.toFixed(4)}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>总费用</div>
+          </div>
         </div>
       </div>
 
@@ -326,4 +369,11 @@ function QuickAction({ icon, title, desc, onClick }: {
       <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{desc}</div>
     </div>
   );
+}
+
+// 数字格式化
+function formatNum(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return String(n);
 }
